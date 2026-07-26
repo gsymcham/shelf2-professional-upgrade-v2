@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+<title>Shelf — Inventory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --paper:#F7F6F2;
+    --ink:#1B1B18;
+    --ink-soft:#5C5A52;
+    --line:#DEDBD1;
+    --panel:#FFFFFF;
+    --amber:#E8A93A;
+    --amber-ink:#4A3410;
+    --green:#3C6E4F;
+    --green-bg:#E6EEE7;
+    --rust:#B3492E;
+    --rust-bg:#F5E4DE;
+    --radius:14px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; height:100%; background:var(--paper); color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif; overscroll-behavior:none;}
+  h1,h2,h3,.display{font-family:'Space Grotesk',system-ui,sans-serif;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  #app{max-width:520px; margin:0 auto; height:100dvh; display:flex; flex-direction:column;}
+
+  header{padding:18px 20px 14px; border-bottom:1px solid var(--line); background:var(--paper);
+    position:sticky; top:0; z-index:5;}
+  header .brand{display:flex; align-items:baseline; justify-content:space-between;}
+  header .brand h1{font-size:22px; margin:0; letter-spacing:-0.02em;}
+  header .brand .count{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft);}
+  .barcode-rule{height:6px; margin-top:10px; border-radius:3px;
+    background:repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 5px, var(--ink) 5px 6px, transparent 6px 11px);
+    opacity:0.85;}
+
+  main{flex:1; overflow-y:auto; padding:16px 16px 100px;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  /* Scan view */
+  .scan-card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px; margin-bottom:14px;}
+  .scan-card h2{font-size:15px; margin:0 0 4px;}
+  .scan-card p{font-size:13px; color:var(--ink-soft); margin:0 0 14px; line-height:1.5;}
+  .gun-input{width:100%; font-size:20px; padding:16px 14px; border-radius:10px;
+    border:2px solid var(--ink); background:var(--paper); color:var(--ink);
+    font-family:'IBM Plex Mono',monospace; letter-spacing:0.02em;}
+  .gun-input:focus{outline:3px solid var(--amber); outline-offset:1px;}
+  .hint{font-size:11.5px; color:var(--ink-soft); margin-top:8px;}
+
+  .cam-toggle{display:flex; align-items:center; justify-content:space-between; margin-top:16px;
+    padding-top:14px; border-top:1px dashed var(--line);}
+  .cam-toggle span{font-size:13px; font-weight:500;}
+  #reader{width:100%; border-radius:10px; overflow:hidden; margin-top:12px; display:none; border:1px solid var(--line);}
+  .cam-msg{font-size:12.5px; color:var(--rust); margin-top:8px; display:none;}
+
+  button{font-family:inherit; cursor:pointer;}
+  .btn{border:none; border-radius:10px; padding:12px 16px; font-size:14px; font-weight:600;}
+  .btn-ink{background:var(--ink); color:var(--paper);}
+  .btn-line{background:transparent; border:1px solid var(--ink); color:var(--ink);}
+  .btn-amber{background:var(--amber); color:var(--amber-ink);}
+  .btn-block{width:100%;}
+  .btn-sm{padding:8px 12px; font-size:12.5px; border-radius:8px;}
+
+  /* Product panel (add/edit) */
+  .panel-overlay{position:fixed; inset:0; background:rgba(27,27,24,0.45); display:none;
+    align-items:flex-end; z-index:20;}
+  .panel-overlay.active{display:flex;}
+  .panel{background:var(--panel); width:100%; max-width:520px; margin:0 auto; border-radius:18px 18px 0 0;
+    padding:20px 20px calc(20px + env(safe-area-inset-bottom)); max-height:88vh; overflow-y:auto;}
+  .panel-handle{width:40px; height:4px; background:var(--line); border-radius:2px; margin:0 auto 16px;}
+  .panel h2{font-size:17px; margin:0 0 2px;}
+  .panel .sub{font-size:12px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; margin-bottom:16px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:6px;
+    text-transform:uppercase; letter-spacing:0.04em;}
+  .field input{width:100%; padding:12px; border:1px solid var(--line); border-radius:8px; font-size:15px;
+    background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif;}
+  .field input.mono{font-family:'IBM Plex Mono',monospace;}
+  .qty-row{display:flex; align-items:center; gap:10px;}
+  .qty-row button{width:44px; height:44px; border-radius:8px; border:1px solid var(--ink); background:var(--paper);
+    font-size:20px; font-weight:600; color:var(--ink);}
+  .qty-row input{text-align:center; font-size:18px; font-weight:600;}
+  .total-line{font-size:12px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace;
+    margin:-4px 0 16px; padding:8px 10px; background:var(--paper); border-radius:8px; border:1px solid var(--line);}
+  .lookup-status{font-size:11.5px; color:var(--ink-soft); margin-top:5px; min-height:14px;}
+  .lookup-status.found{color:var(--green);}
+  .status-row{display:flex; gap:8px; margin-bottom:16px;}
+  .status-pill{flex:1; text-align:center; padding:10px; border-radius:8px; border:1px solid var(--line);
+    font-size:12.5px; font-weight:600; color:var(--ink-soft);}
+  .status-pill.on{border-color:transparent;}
+  .status-pill.in.on{background:var(--green-bg); color:var(--green);}
+  .status-pill.out.on{background:var(--rust-bg); color:var(--rust);}
+  .panel-actions{display:flex; gap:10px; margin-top:6px;}
+  .panel-actions .btn{flex:1;}
+  .delete-link{display:block; text-align:center; margin-top:14px; font-size:12.5px; color:var(--rust);
+    background:none; border:none; text-decoration:underline;}
+
+  /* Inventory view */
+  .search-bar{width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:10px;
+    background:var(--panel); font-size:14px; margin-bottom:14px;}
+  .row{display:flex; align-items:center; justify-content:space-between; gap:12px;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px 14px; margin-bottom:8px;}
+  .row .info{min-width:0;}
+  .row .name{font-size:14.5px; font-weight:600; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .row .meta{font-size:11.5px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace;}
+  .row .right{display:flex; align-items:center; gap:10px; flex-shrink:0;}
+  .row .qty{font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:15px; text-align:right;}
+  .row .loc{font-size:10.5px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; text-align:right; margin-top:2px;}
+  .row .cases-flag{font-size:10px; color:var(--amber-ink); background:#FBEBCB; padding:2px 6px; border-radius:6px; margin-top:3px; display:inline-block;}
+  .badge{font-size:10.5px; font-weight:700; padding:4px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:0.03em;}
+  .badge.in{background:var(--green-bg); color:var(--green);}
+  .badge.out{background:var(--rust-bg); color:var(--rust);}
+  .empty{text-align:center; padding:60px 20px; color:var(--ink-soft);}
+  .empty .icon{font-size:34px; margin-bottom:10px;}
+  .empty p{font-size:13.5px; line-height:1.6; margin:0;}
+
+  /* Export view */
+  .export-card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:20px; text-align:center;}
+  .export-card .icon{font-size:32px; margin-bottom:10px;}
+  .export-card h2{font-size:16px; margin:0 0 6px;}
+  .export-card p{font-size:13px; color:var(--ink-soft); margin:0 0 18px; line-height:1.5;}
+  .stat-strip{display:flex; gap:8px; margin-top:16px;}
+  .stat-strip div{flex:1; background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:12px 8px;}
+  .stat-strip .n{font-family:'IBM Plex Mono',monospace; font-size:19px; font-weight:600;}
+  .stat-strip .l{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.03em; margin-top:2px;}
+  .toast{position:fixed; bottom:96px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--paper);
+    padding:10px 18px; border-radius:20px; font-size:13px; opacity:0; pointer-events:none; transition:opacity 0.25s; z-index:30;}
+  .toast.show{opacity:1;}
+
+  nav{position:fixed; bottom:0; left:0; right:0; background:var(--panel); border-top:1px solid var(--line);
+    padding:8px 0 calc(8px + env(safe-area-inset-bottom)); z-index:10;}
+  nav .navwrap{max-width:520px; margin:0 auto; display:flex;}
+  nav button{flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center;
+    gap:3px; padding:6px 0; color:var(--ink-soft); font-size:11px; font-weight:600;}
+  nav button .ic{font-size:19px;}
+  nav button.active{color:var(--ink);}
+  nav button.active .ic{transform:translateY(-1px);}
+  nav .fab{background:var(--amber); color:var(--amber-ink); width:48px; height:48px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:22px; margin:-14px auto 0; font-weight:700;}
+
+  /* Authentication */
+  .auth-overlay{position:fixed; inset:0; z-index:100; background:var(--paper); display:flex; align-items:center; justify-content:center; padding:22px;}
+  .auth-overlay.hidden{display:none;}
+  .auth-card{width:100%; max-width:420px; background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:24px;}
+  .auth-card h2{margin:0 0 6px; font-size:22px;}
+  .auth-card p{margin:0 0 18px; color:var(--ink-soft); font-size:13px; line-height:1.5;}
+  .auth-tabs{display:flex; gap:8px; margin-bottom:16px;}
+  .auth-tabs button{flex:1;}
+  .auth-error{min-height:18px; color:var(--rust); font-size:12px; margin:8px 0;}
+  .user-strip{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px;}
+  .user-email{font-size:11px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .sync-state{font-size:10.5px; color:var(--green); font-family:'IBM Plex Mono',monospace;}
+
+</style>
+</head>
+<body>
+
+  <div class="auth-overlay" id="authOverlay">
+    <div class="auth-card">
+      <h2>Shelf2 Inventory</h2>
+      <p>Sign in to access the shared inventory. Every authorized user sees the same products and quantities.</p>
+      <div class="auth-tabs">
+        <button class="btn btn-ink" id="authSignInTab">Sign in</button>
+        <button class="btn btn-line" id="authSignUpTab">Create account</button>
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="authPassword" autocomplete="current-password" placeholder="At least 6 characters">
+      </div>
+      <div class="auth-error" id="authError"></div>
+      <button class="btn btn-amber btn-block" id="authSubmit">Sign in</button>
+    </div>
+  </div>
+
+<div id="app">
+
+  <header>
+    <div class="brand">
+      <h1>Shelf2</h1>
+      <span class="count mono" id="headerCount">0 items</span>
+    </div>
+    <div class="barcode-rule"></div>
+    <div class="user-strip">
+      <span class="user-email" id="userEmail"></span>
+      <span class="sync-state" id="syncState">Offline</span>
+      <button class="btn btn-line btn-sm" id="signOutBtn" style="display:none;">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- SCAN VIEW -->
+    <section class="view active" id="view-scan">
+      <div class="scan-card">
+        <h2>Scan a barcode</h2>
+        <p>Use a Bluetooth/USB barcode scanner — it types the code and hits enter automatically, just like a keyboard. Tap the box below first.</p>
+        <input type="text" class="gun-input" id="gunInput" placeholder="Waiting for scan…" autocomplete="off" autocorrect="off" autocapitalize="off">
+        <p class="hint">No scanner handy? Type the code and press enter, or use the camera below.</p>
+
+        <div class="cam-toggle">
+          <span>Use phone camera instead</span>
+          <button class="btn btn-line btn-sm" id="camBtn">Turn on</button>
+        </div>
+        <div id="reader"></div>
+        <p class="cam-msg" id="camMsg"></p>
+      </div>
+
+      <button class="btn btn-ink btn-block" id="manualAddBtn">+ Add product manually</button>
+    </section>
+
+    <!-- INVENTORY VIEW -->
+    <section class="view" id="view-inventory">
+      <input type="text" class="search-bar" id="searchInput" placeholder="Search by name or barcode">
+      <div id="listWrap"></div>
+    </section>
+
+    <!-- EXPORT VIEW -->
+    <section class="view" id="view-export">
+      <div class="export-card">
+        <div class="icon">📤</div>
+        <h2>Export to Excel</h2>
+        <p>Downloads a spreadsheet of your full inventory — barcode, name, floor/back room quantities, unopened cases, and status — ready to open, email, or archive.</p>
+        <button class="btn btn-amber btn-block" id="exportBtn">Download .xlsx</button>
+        <div class="stat-strip">
+          <div><div class="n mono" id="statTotal">0</div><div class="l">Products</div></div>
+          <div><div class="n mono" id="statUnits">0</div><div class="l">Total units</div></div>
+          <div><div class="n mono" id="statCases">0</div><div class="l">Cases</div></div>
+          <div><div class="n mono" id="statOut">0</div><div class="l">Out of stock</div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav>
+    <div class="navwrap">
+      <button class="navbtn active" data-view="scan"><span class="ic">▤</span>Scan</button>
+      <button class="navbtn" data-view="inventory"><span class="ic">▦</span>Inventory</button>
+      <button class="navbtn" data-view="export"><span class="ic">⇩</span>Export</button>
+    </div>
+  </nav>
+
+  <div class="panel-overlay" id="panelOverlay">
+    <div class="panel">
+      <div class="panel-handle"></div>
+      <h2 id="panelTitle">Add product</h2>
+      <div class="sub mono" id="panelBarcode">—</div>
+
+      <div class="field">
+        <label>Barcode</label>
+        <input type="text" class="mono" id="fieldBarcode" placeholder="Scan or type code">
+      </div>
+      <div class="field">
+        <label>Product name</label>
+        <input type="text" id="fieldName" placeholder="e.g. Blue Canvas Tote">
+        <div class="lookup-status" id="lookupStatus"></div>
+      </div>
+      <div class="field">
+        <label>On the floor</label>
+        <div class="qty-row">
+          <button id="floorMinus">−</button>
+          <input type="number" id="fieldFloorQty" value="0" inputmode="numeric">
+          <button id="floorPlus">+</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Back room — open</label>
+        <div class="qty-row">
+          <button id="backMinus">−</button>
+          <input type="number" id="fieldBackQty" value="0" inputmode="numeric">
+          <button id="backPlus">+</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Back room — unopened cases</label>
+        <div class="qty-row">
+          <button id="casesMinus">−</button>
+          <input type="number" id="fieldCases" value="0" inputmode="numeric">
+          <button id="casesPlus">+</button>
+        </div>
+      </div>
+      <div class="field" id="unitsPerCaseField">
+        <label>Bottles (units) per case</label>
+        <input type="number" id="fieldUnitsPerCase" value="" inputmode="numeric" placeholder="e.g. 12">
+      </div>
+      <div class="total-line" id="totalLine">Total on hand: 0 units · 0 cases</div>
+      <div class="field">
+        <label>Status</label>
+        <div class="status-row">
+          <button class="status-pill in" id="statusInBtn">In stock</button>
+          <button class="status-pill out" id="statusOutBtn">Out of stock</button>
+        </div>
+      </div>
+
+      <div class="panel-actions">
+        <button class="btn btn-line" id="panelCancel">Cancel</button>
+        <button class="btn btn-ink" id="panelSave">Save</button>
+      </div>
+      <button class="delete-link" id="panelDelete" style="display:none;">Delete product</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+(function(){
+  const SUPABASE_URL = 'https://palrtkdvdtkqmvkjfuud.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhbHJ0a2R2ZHRrcW12a2pmdXVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwOTEyMjQsImV4cCI6MjEwMDY2NzIyNH0.5gYn9PvkMZFk922qULn4GmCQvgUnHeiES4mSEVe5q0w';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+  });
+  let inventory = [];
+  let currentUser = null;
+  let realtimeChannel = null;
+  let authMode = 'signin';
+  let currentEditId = null;
+  let html5QrCode = null;
+  let camRunning = false;
+
+  const $ = (id) => document.getElementById(id);
+  const views = { scan: $('view-scan'), inventory: $('view-inventory'), export: $('view-export') };
+  const navBtns = document.querySelectorAll('.navbtn');
+
+  function showToast(msg){
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=> t.classList.remove('show'), 1600);
+  }
+
+  function switchView(name){
+    Object.keys(views).forEach(k => views[k].classList.toggle('active', k === name));
+    navBtns.forEach(b => b.classList.toggle('active', b.dataset.view === name));
+    if(name === 'inventory') renderList();
+    if(name === 'export') renderStats();
+    if(name === 'scan') setTimeout(()=> $('gunInput').focus(), 200);
+  }
+  navBtns.forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+
+  function setSyncState(text, isError){
+    const el = $('syncState');
+    el.textContent = text;
+    el.style.color = isError ? 'var(--rust)' : 'var(--green)';
+  }
+
+  function fromDb(row){
+    return {
+      id: row.id, barcode: row.barcode, name: row.name,
+      floorQty: row.floor_qty || 0, backroomQty: row.backroom_qty || 0,
+      backroomCases: row.backroom_cases || 0, unitsPerCase: row.units_per_case || 0,
+      status: row.status || 'in_stock', updatedAt: new Date(row.updated_at).getTime(),
+      updatedBy: row.updated_by
+    };
+  }
+
+  async function loadInventory(){
+    if(!currentUser) return;
+    setSyncState('Syncing…');
+    const { data, error } = await supabaseClient
+      .from('inventory')
+      .select('*')
+      .order('updated_at', { ascending: false });
+    if(error){
+      console.error(error);
+      setSyncState('Sync failed', true);
+      showToast(error.message || 'Could not load inventory');
+      return;
+    }
+    inventory = (data || []).map(fromDb);
+    updateHeaderCount();
+    renderList();
+    renderStats();
+    setSyncState('Cloud saved');
+  }
+
+  function subscribeToInventory(){
+    if(realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+    realtimeChannel = supabaseClient.channel('shared-inventory')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => loadInventory())
+      .subscribe(status => {
+        if(status === 'SUBSCRIBED') setSyncState('Live');
+      });
+  }
+
+  async function saveNewProduct(product){
+    setSyncState('Saving…');
+    const { error } = await supabaseClient.from('inventory').insert({
+      barcode: product.barcode, name: product.name, floor_qty: product.floorQty,
+      backroom_qty: product.backroomQty, backroom_cases: product.backroomCases,
+      units_per_case: product.unitsPerCase, status: product.status, updated_by: currentUser.id
+    });
+    if(error) throw error;
+  }
+
+  async function updateProduct(id, product){
+    setSyncState('Saving…');
+    const { error } = await supabaseClient.from('inventory').update({
+      barcode: product.barcode, name: product.name, floor_qty: product.floorQty,
+      backroom_qty: product.backroomQty, backroom_cases: product.backroomCases,
+      units_per_case: product.unitsPerCase, status: product.status,
+      updated_by: currentUser.id, updated_at: new Date().toISOString()
+    }).eq('id', id);
+    if(error) throw error;
+  }
+
+  function updateHeaderCount(){
+    $('headerCount').textContent = inventory.length + (inventory.length === 1 ? ' item' : ' items');
+  }
+
+  function findByBarcode(code){
+    return inventory.find(p => p.barcode === code);
+  }
+
+  function caseUnits(p){
+    return (p.backroomCases || 0) * (p.unitsPerCase || 0);
+  }
+  function grandTotal(p){
+    return (p.floorQty || 0) + (p.backroomQty || 0) + caseUnits(p);
+  }
+
+  // ---- Panel (add/edit) ----
+  let lookupSeq = 0;
+
+  function openPanel(product, autoLookup){
+    currentEditId = product ? product.id : null;
+    $('panelTitle').textContent = product ? 'Edit product' : 'Add product';
+    $('panelBarcode').textContent = product ? product.barcode : 'New item';
+    $('fieldBarcode').value = product ? product.barcode : (pendingBarcode || '');
+    $('fieldName').value = product ? product.name : '';
+    $('fieldFloorQty').value = product ? (product.floorQty || 0) : 0;
+    $('fieldBackQty').value = product ? (product.backroomQty || 0) : 0;
+    $('fieldCases').value = product ? (product.backroomCases || 0) : 0;
+    $('fieldUnitsPerCase').value = product && product.unitsPerCase ? product.unitsPerCase : '';
+    updateTotalLine();
+    setStatusPills(product ? product.status : 'in_stock');
+    $('panelDelete').style.display = product ? 'block' : 'none';
+    $('panelOverlay').classList.add('active');
+    const statusEl = $('lookupStatus');
+    statusEl.textContent = '';
+    statusEl.classList.remove('found');
+    setTimeout(()=> $('fieldName').focus(), 150);
+
+    if(autoLookup && !product){
+      const barcode = $('fieldBarcode').value.trim();
+      if(barcode) runProductLookup(barcode);
+    }
+  }
+
+  async function runProductLookup(barcode){
+    const seq = ++lookupSeq;
+    const statusEl = $('lookupStatus');
+    statusEl.textContent = 'Looking up product…';
+    const result = await lookupProduct(barcode);
+    // Bail if the panel moved on to something else while we were waiting
+    if(seq !== lookupSeq || currentEditId || $('fieldBarcode').value.trim() !== barcode) return;
+    if(result && result.name){
+      if(!$('fieldName').value.trim()) $('fieldName').value = result.name;
+      statusEl.textContent = `Found: ${result.source}`;
+      statusEl.classList.add('found');
+    } else {
+      statusEl.textContent = 'No match found — enter details manually';
+      statusEl.classList.remove('found');
+    }
+  }
+
+  async function lookupProduct(barcode){
+    // Open Food Facts: free, open, no key, reliable CORS support (food/grocery items)
+    try{
+      const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(barcode)}.json`);
+      const data = await r.json();
+      if(data && data.status === 1 && data.product){
+        const name = data.product.product_name || data.product.generic_name;
+        if(name) return { name, source: 'Open Food Facts' };
+      }
+    }catch(e){ /* ignore and fall through */ }
+
+    // UPCitemdb free trial: broader general-merchandise coverage, rate-limited,
+    // may fail depending on CORS — fails quietly if so.
+    try{
+      const r2 = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${encodeURIComponent(barcode)}`);
+      const data2 = await r2.json();
+      if(data2 && data2.code === 'OK' && data2.items && data2.items.length){
+        const item = data2.items[0];
+        if(item.title) return { name: item.title, source: 'UPCitemdb' };
+      }
+    }catch(e){ /* ignore */ }
+
+    return null;
+  }
+
+  function updateTotalLine(){
+    const floor = parseInt($('fieldFloorQty').value || '0', 10);
+    const back = parseInt($('fieldBackQty').value || '0', 10);
+    const cases = parseInt($('fieldCases').value || '0', 10);
+    const perCase = parseInt($('fieldUnitsPerCase').value || '0', 10);
+    if(cases > 0 && perCase > 0){
+      const caseUnits = cases * perCase;
+      const grand = floor + back + caseUnits;
+      $('totalLine').textContent = `Total on hand: ${grand} units  (${floor} floor + ${back} back room + ${caseUnits} in ${cases} case${cases === 1 ? '' : 's'} @ ${perCase})`;
+    } else {
+      $('totalLine').textContent = `Total on hand: ${floor + back} unit${floor + back === 1 ? '' : 's'} · ${cases} unopened case${cases === 1 ? '' : 's'}${cases > 0 ? ' (add units/case above to include in total)' : ''}`;
+    }
+  }
+  function closePanel(){
+    $('panelOverlay').classList.remove('active');
+    currentEditId = null;
+    pendingBarcode = null;
+  }
+  function setStatusPills(status){
+    $('statusInBtn').classList.toggle('on', status === 'in_stock');
+    $('statusOutBtn').classList.toggle('on', status === 'out_of_stock');
+  }
+  $('statusInBtn').addEventListener('click', ()=> setStatusPills('in_stock'));
+  $('statusOutBtn').addEventListener('click', ()=> setStatusPills('out_of_stock'));
+  function stepper(minusId, plusId, fieldId){
+    $(minusId).addEventListener('click', ()=>{
+      const el = $(fieldId); el.value = Math.max(0, (parseInt(el.value||0,10) - 1)); updateTotalLine();
+    });
+    $(plusId).addEventListener('click', ()=>{
+      const el = $(fieldId); el.value = (parseInt(el.value||0,10) + 1); updateTotalLine();
+    });
+    $(fieldId).addEventListener('input', updateTotalLine);
+  }
+  stepper('floorMinus', 'floorPlus', 'fieldFloorQty');
+  stepper('backMinus', 'backPlus', 'fieldBackQty');
+  stepper('casesMinus', 'casesPlus', 'fieldCases');
+  $('fieldUnitsPerCase').addEventListener('input', updateTotalLine);
+  $('panelCancel').addEventListener('click', closePanel);
+  $('panelOverlay').addEventListener('click', (e)=>{ if(e.target.id === 'panelOverlay') closePanel(); });
+  $('fieldBarcode').addEventListener('blur', ()=>{
+    const barcode = $('fieldBarcode').value.trim();
+    if(!currentEditId && barcode && !$('fieldName').value.trim()) runProductLookup(barcode);
+  });
+
+  $('panelSave').addEventListener('click', async ()=>{
+    const barcode = $('fieldBarcode').value.trim();
+    const name = $('fieldName').value.trim();
+    const floorQty = Math.max(0, parseInt($('fieldFloorQty').value || '0', 10));
+    const backroomQty = Math.max(0, parseInt($('fieldBackQty').value || '0', 10));
+    const backroomCases = Math.max(0, parseInt($('fieldCases').value || '0', 10));
+    const unitsPerCase = Math.max(0, parseInt($('fieldUnitsPerCase').value || '0', 10));
+    const status = $('statusOutBtn').classList.contains('on') ? 'out_of_stock' : 'in_stock';
+
+    if(!name){ showToast('Give it a product name'); return; }
+    if(!barcode){ showToast('Barcode is required'); return; }
+
+    const dupe = findByBarcode(barcode);
+    if(dupe && dupe.id !== currentEditId){ showToast('That barcode is already in use'); return; }
+
+    try{
+      const product = { barcode, name, floorQty, backroomQty, backroomCases, unitsPerCase, status };
+      if(currentEditId){
+        await updateProduct(currentEditId, product);
+        showToast('Updated in cloud');
+      } else {
+        await saveNewProduct(product);
+        showToast('Added to cloud');
+      }
+      closePanel();
+      await loadInventory();
+    }catch(error){
+      console.error(error);
+      setSyncState('Save failed', true);
+      showToast(error.code === '23505' ? 'That barcode is already in use' : (error.message || 'Could not save'));
+    }
+  });
+
+  $('panelDelete').addEventListener('click', async ()=>{
+    if(!currentEditId) return;
+    try{
+      setSyncState('Deleting…');
+      const { error } = await supabaseClient.from('inventory').delete().eq('id', currentEditId);
+      if(error) throw error;
+      closePanel();
+      await loadInventory();
+      showToast('Deleted from cloud');
+    }catch(error){
+      console.error(error);
+      setSyncState('Delete failed', true);
+      showToast(error.message || 'Could not delete');
+    }
+  });
+
+  $('manualAddBtn').addEventListener('click', ()=> openPanel(null));
+
+  // ---- Scan (hardware / keyboard-wedge scanner) ----
+  let pendingBarcode = null;
+  const gunInput = $('gunInput');
+  gunInput.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      const code = gunInput.value.trim();
+      gunInput.value = '';
+      if(!code) return;
+      handleScannedCode(code);
+    }
+  });
+
+  function handleScannedCode(code){
+    const existing = findByBarcode(code);
+    if(existing){
+      openPanel(existing);
+    } else {
+      pendingBarcode = code;
+      openPanel(null, true);
+    }
+  }
+
+  // ---- Camera scanning (optional, phone camera) ----
+  $('camBtn').addEventListener('click', async ()=>{
+    if(camRunning){ stopCamera(); return; }
+    startCamera();
+  });
+
+  function startCamera(){
+    const readerEl = $('reader');
+    const msgEl = $('camMsg');
+    msgEl.style.display = 'none';
+    readerEl.style.display = 'block';
+    html5QrCode = new Html5Qrcode('reader');
+    html5QrCode.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 240, height: 140 } },
+      (decodedText) => {
+        stopCamera();
+        handleScannedCode(decodedText);
+      },
+      () => {}
+    ).then(()=>{
+      camRunning = true;
+      $('camBtn').textContent = 'Turn off';
+    }).catch((err)=>{
+      readerEl.style.display = 'none';
+      msgEl.style.display = 'block';
+      msgEl.textContent = 'Camera unavailable here — this can happen inside the preview window. Use a hardware scanner or type the code above instead.';
+    });
+  }
+  function stopCamera(){
+    if(html5QrCode && camRunning){
+      html5QrCode.stop().then(()=>{
+        html5QrCode.clear();
+        $('reader').style.display = 'none';
+        $('camBtn').textContent = 'Turn on';
+        camRunning = false;
+      }).catch(()=>{
+        camRunning = false;
+        $('camBtn').textContent = 'Turn on';
+      });
+    }
+  }
+
+  // ---- Inventory list ----
+  $('searchInput').addEventListener('input', renderList);
+
+  function renderList(){
+    const q = $('searchInput').value.trim().toLowerCase();
+    const wrap = $('listWrap');
+    let items = inventory.slice().sort((a,b)=> b.updatedAt - a.updatedAt);
+    if(q){
+      items = items.filter(p => p.name.toLowerCase().includes(q) || p.barcode.toLowerCase().includes(q));
+    }
+    if(items.length === 0){
+      wrap.innerHTML = `<div class="empty"><div class="icon">📦</div><p>${inventory.length === 0 ? 'No products yet.<br>Scan or add your first item.' : 'No matches for that search.'}</p></div>`;
+      return;
+    }
+    wrap.innerHTML = items.map(p => {
+      const floor = p.floorQty || 0;
+      const back = p.backroomQty || 0;
+      const cases = p.backroomCases || 0;
+      const cu = caseUnits(p);
+      const total = floor + back + cu;
+      const locText = cases > 0
+        ? (p.unitsPerCase ? `F ${floor} · B ${back} · ${cu} in case` : `F ${floor} · B ${back}`)
+        : `F ${floor} · B ${back}`;
+      return `
+      <div class="row" data-id="${p.id}">
+        <div class="info">
+          <div class="name">${escapeHtml(p.name)}</div>
+          <div class="meta">${escapeHtml(p.barcode)}</div>
+          ${cases > 0 ? `<span class="cases-flag">${cases} unopened case${cases === 1 ? '' : 's'}${p.unitsPerCase ? ` × ${p.unitsPerCase}` : ' — set units/case'}</span>` : ''}
+        </div>
+        <div class="right">
+          <div>
+            <div class="qty">${total}</div>
+            <div class="loc">${locText}</div>
+          </div>
+          <span class="badge ${p.status === 'out_of_stock' ? 'out' : 'in'}">${p.status === 'out_of_stock' ? 'Out' : 'In stock'}</span>
+        </div>
+      </div>
+    `;
+    }).join('');
+    wrap.querySelectorAll('.row').forEach(row => {
+      row.addEventListener('click', ()=>{
+        const p = inventory.find(x => x.id === row.dataset.id);
+        if(p) openPanel(p);
+      });
+    });
+  }
+
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---- Export ----
+  function renderStats(){
+    const total = inventory.length;
+    const units = inventory.reduce((s,p)=> s + grandTotal(p), 0);
+    const cases = inventory.reduce((s,p)=> s + (p.backroomCases || 0), 0);
+    const out = inventory.filter(p => p.status === 'out_of_stock').length;
+    $('statTotal').textContent = total;
+    $('statUnits').textContent = units;
+    $('statCases').textContent = cases;
+    $('statOut').textContent = out;
+  }
+
+  $('exportBtn').addEventListener('click', ()=>{
+    if(inventory.length === 0){ showToast('Nothing to export yet'); return; }
+    const rows = inventory
+      .slice()
+      .sort((a,b)=> a.name.localeCompare(b.name))
+      .map(p => ({
+        'Barcode': p.barcode,
+        'Product Name': p.name,
+        'On Floor': p.floorQty || 0,
+        'Back Room (open)': p.backroomQty || 0,
+        'Unopened Cases': p.backroomCases || 0,
+        'Units per Case': p.unitsPerCase || '',
+        'Units in Cases': caseUnits(p),
+        'Total Inventory': grandTotal(p),
+        'Status': p.status === 'out_of_stock' ? 'Out of stock' : 'In stock',
+        'Last Updated': new Date(p.updatedAt).toLocaleString()
+      }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{wch:16},{wch:32},{wch:9},{wch:14},{wch:12},{wch:11},{wch:12},{wch:13},{wch:14},{wch:20}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
+    const dateStr = new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb, `shelf-inventory-${dateStr}.xlsx`);
+    showToast('Exported');
+  });
+
+  // ---- Authentication and initialization ----
+  function setAuthMode(mode){
+    authMode = mode;
+    const signIn = mode === 'signin';
+    $('authSignInTab').className = 'btn ' + (signIn ? 'btn-ink' : 'btn-line');
+    $('authSignUpTab').className = 'btn ' + (!signIn ? 'btn-ink' : 'btn-line');
+    $('authSubmit').textContent = signIn ? 'Sign in' : 'Create account';
+    $('authPassword').autocomplete = signIn ? 'current-password' : 'new-password';
+    $('authError').textContent = '';
+  }
+
+  async function applySession(session){
+    currentUser = session ? session.user : null;
+    $('authOverlay').classList.toggle('hidden', !!currentUser);
+    $('signOutBtn').style.display = currentUser ? 'block' : 'none';
+    $('userEmail').textContent = currentUser ? currentUser.email : '';
+    if(currentUser){
+      subscribeToInventory();
+      await loadInventory();
+      setTimeout(()=> gunInput.focus(), 300);
+    }else{
+      inventory = [];
+      updateHeaderCount();
+      renderList();
+      setSyncState('Offline');
+      if(realtimeChannel){ supabaseClient.removeChannel(realtimeChannel); realtimeChannel = null; }
+    }
+  }
+
+  $('authSignInTab').addEventListener('click', ()=> setAuthMode('signin'));
+  $('authSignUpTab').addEventListener('click', ()=> setAuthMode('signup'));
+  $('authSubmit').addEventListener('click', async ()=>{
+    const email = $('authEmail').value.trim();
+    const password = $('authPassword').value;
+    $('authError').textContent = '';
+    if(!email || password.length < 6){ $('authError').textContent = 'Enter a valid email and a password of at least 6 characters.'; return; }
+    $('authSubmit').disabled = true;
+    try{
+      if(authMode === 'signin'){
+        const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if(error) throw error;
+      }else{
+        const { data, error } = await supabaseClient.auth.signUp({ email, password });
+        if(error) throw error;
+        if(!data.session){
+          $('authError').style.color = 'var(--green)';
+          $('authError').textContent = 'Account created. Check your email to confirm it, then sign in.';
+          setAuthMode('signin');
+        }
+      }
+    }catch(error){
+      $('authError').style.color = 'var(--rust)';
+      $('authError').textContent = error.message || 'Authentication failed.';
+    }finally{ $('authSubmit').disabled = false; }
+  });
+  $('authPassword').addEventListener('keydown', e => { if(e.key === 'Enter') $('authSubmit').click(); });
+  $('signOutBtn').addEventListener('click', async ()=>{ await supabaseClient.auth.signOut(); });
+
+  supabaseClient.auth.onAuthStateChange((_event, session)=> applySession(session));
+  supabaseClient.auth.getSession().then(({data})=> applySession(data.session));
+})();
+</script>
+</body>
+</html>
