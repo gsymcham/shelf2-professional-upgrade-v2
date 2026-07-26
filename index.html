@@ -158,6 +158,10 @@
   .user-strip{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px;}
   .user-email{font-size:11px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .sync-state{font-size:10.5px; color:var(--green); font-family:'IBM Plex Mono',monospace;}
+  .select-add-row{display:flex;gap:8px;align-items:stretch;}
+  .select-add-row select{flex:1;width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;font-size:15px;background:var(--paper);color:var(--ink);}
+  .select-add-row .btn{white-space:nowrap;}
+  .money-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 
 </style>
 </head>
@@ -221,7 +225,7 @@
 
     <!-- INVENTORY VIEW -->
     <section class="view" id="view-inventory">
-      <input type="text" class="search-bar" id="searchInput" placeholder="Search by name or barcode">
+      <input type="text" class="search-bar" id="searchInput" placeholder="Search name, barcode, category, or distributor">
       <div id="listWrap"></div>
     </section>
 
@@ -230,7 +234,7 @@
       <div class="export-card">
         <div class="icon">📤</div>
         <h2>Export to Excel</h2>
-        <p>Downloads a spreadsheet of your full inventory — barcode, name, floor/back room quantities, unopened cases, and status — ready to open, email, or archive.</p>
+        <p>Downloads a spreadsheet of your full inventory — barcode, name, price, cost, category, distributor, quantities, cases, and status — ready to open, email, or archive.</p>
         <button class="btn btn-amber btn-block" id="exportBtn">Download .xlsx</button>
         <div class="stat-strip">
           <div><div class="n mono" id="statTotal">0</div><div class="l">Products</div></div>
@@ -264,6 +268,30 @@
         <label>Product name</label>
         <input type="text" id="fieldName" placeholder="e.g. Blue Canvas Tote">
         <div class="lookup-status" id="lookupStatus"></div>
+      </div>
+      <div class="money-row">
+        <div class="field">
+          <label>Selling price</label>
+          <input type="number" id="fieldPrice" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+        </div>
+        <div class="field">
+          <label>Cost</label>
+          <input type="number" id="fieldCost" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+        </div>
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <div class="select-add-row">
+          <select id="fieldCategory"><option value="">Uncategorized</option></select>
+          <button class="btn btn-line btn-sm" type="button" id="addCategoryBtn">+ Add</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Distributor</label>
+        <div class="select-add-row">
+          <select id="fieldDistributor"><option value="">Not assigned</option></select>
+          <button class="btn btn-line btn-sm" type="button" id="addDistributorBtn">+ Add</button>
+        </div>
       </div>
       <div class="field">
         <label>On the floor</label>
@@ -321,6 +349,8 @@
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   });
   let inventory = [];
+  let categories = [];
+  let distributors = [];
   let currentUser = null;
   let realtimeChannel = null;
   let authMode = 'signin';
@@ -357,11 +387,40 @@
   function fromDb(row){
     return {
       id: row.id, barcode: row.barcode, name: row.name,
+      price: row.price == null ? null : Number(row.price),
+      cost: row.cost == null ? null : Number(row.cost),
+      category: row.category || '', distributor: row.distributor || '',
       floorQty: row.floor_qty || 0, backroomQty: row.backroom_qty || 0,
       backroomCases: row.backroom_cases || 0, unitsPerCase: row.units_per_case || 0,
       status: row.status || 'in_stock', updatedAt: new Date(row.updated_at).getTime(),
       updatedBy: row.updated_by
     };
+  }
+
+  function fillSelect(id, values, selected, emptyLabel){
+    const el = $(id);
+    const clean = [...new Set((values || []).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    el.innerHTML = `<option value="">${escapeHtml(emptyLabel)}</option>` + clean.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    if(selected && !clean.includes(selected)){
+      el.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(selected)}">${escapeHtml(selected)}</option>`);
+    }
+    el.value = selected || '';
+  }
+
+  async function loadLookupLists(){
+    if(!currentUser) return;
+    const [catRes, distRes, invRes, catalogRes] = await Promise.all([
+      supabaseClient.from('categories').select('name').order('name'),
+      supabaseClient.from('distributors').select('name').order('name'),
+      supabaseClient.from('inventory').select('category,distributor'),
+      supabaseClient.from('product_catalog').select('category,distributor')
+    ]);
+    const errors = [catRes.error, distRes.error, invRes.error, catalogRes.error].filter(Boolean);
+    if(errors.length) console.warn('Lookup-list load warning', errors);
+    categories = [...new Set([...(catRes.data||[]).map(x=>x.name), ...(invRes.data||[]).map(x=>x.category), ...(catalogRes.data||[]).map(x=>x.category)].filter(Boolean))];
+    distributors = [...new Set([...(distRes.data||[]).map(x=>x.name), ...(invRes.data||[]).map(x=>x.distributor), ...(catalogRes.data||[]).map(x=>x.distributor)].filter(Boolean))];
+    fillSelect('fieldCategory', categories, $('fieldCategory').value, 'Uncategorized');
+    fillSelect('fieldDistributor', distributors, $('fieldDistributor').value, 'Not assigned');
   }
 
   async function loadInventory(){
@@ -378,6 +437,7 @@
       return;
     }
     inventory = (data || []).map(fromDb);
+    await loadLookupLists();
     updateHeaderCount();
     renderList();
     renderStats();
@@ -396,7 +456,8 @@
   async function saveNewProduct(product){
     setSyncState('Saving…');
     const { error } = await supabaseClient.from('inventory').insert({
-      barcode: product.barcode, name: product.name, floor_qty: product.floorQty,
+      barcode: product.barcode, name: product.name, price: product.price, cost: product.cost,
+      category: product.category || null, distributor: product.distributor || null, floor_qty: product.floorQty,
       backroom_qty: product.backroomQty, backroom_cases: product.backroomCases,
       units_per_case: product.unitsPerCase, status: product.status, updated_by: currentUser.id
     });
@@ -406,7 +467,8 @@
   async function updateProduct(id, product){
     setSyncState('Saving…');
     const { error } = await supabaseClient.from('inventory').update({
-      barcode: product.barcode, name: product.name, floor_qty: product.floorQty,
+      barcode: product.barcode, name: product.name, price: product.price, cost: product.cost,
+      category: product.category || null, distributor: product.distributor || null, floor_qty: product.floorQty,
       backroom_qty: product.backroomQty, backroom_cases: product.backroomCases,
       units_per_case: product.unitsPerCase, status: product.status,
       updated_by: currentUser.id, updated_at: new Date().toISOString()
@@ -438,6 +500,10 @@
     $('panelBarcode').textContent = product ? product.barcode : 'New item';
     $('fieldBarcode').value = product ? product.barcode : (pendingBarcode || '');
     $('fieldName').value = product ? product.name : '';
+    $('fieldPrice').value = product && product.price != null ? product.price : '';
+    $('fieldCost').value = product && product.cost != null ? product.cost : '';
+    fillSelect('fieldCategory', categories, product ? product.category : '', 'Uncategorized');
+    fillSelect('fieldDistributor', distributors, product ? product.distributor : '', 'Not assigned');
     $('fieldFloorQty').value = product ? (product.floorQty || 0) : 0;
     $('fieldBackQty').value = product ? (product.backroomQty || 0) : 0;
     $('fieldCases').value = product ? (product.backroomCases || 0) : 0;
@@ -466,6 +532,10 @@
     if(seq !== lookupSeq || currentEditId || $('fieldBarcode').value.trim() !== barcode) return;
     if(result && result.name){
       if(!$('fieldName').value.trim()) $('fieldName').value = result.name;
+      if(result.price != null) $('fieldPrice').value = Number(result.price).toFixed(2);
+      if(result.cost != null) $('fieldCost').value = Number(result.cost).toFixed(2);
+      fillSelect('fieldCategory', categories, result.category || '', 'Uncategorized');
+      fillSelect('fieldDistributor', distributors, result.distributor || '', 'Not assigned');
       statusEl.textContent = `Found: ${result.source}`;
       statusEl.classList.add('found');
     } else {
@@ -475,27 +545,22 @@
   }
 
   async function lookupProduct(barcode){
-    // Open Food Facts: free, open, no key, reliable CORS support (food/grocery items)
+    // First use the imported business catalog. Existing inventory is checked before this function runs.
     try{
-      const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(barcode)}.json`);
-      const data = await r.json();
-      if(data && data.status === 1 && data.product){
-        const name = data.product.product_name || data.product.generic_name;
-        if(name) return { name, source: 'Open Food Facts' };
+      const { data, error } = await supabaseClient
+        .from('product_catalog')
+        .select('barcode,product_name,price,cost,category,distributor')
+        .eq('barcode', barcode)
+        .maybeSingle();
+      if(error) throw error;
+      if(data){
+        return {
+          name: data.product_name || '', price: data.price, cost: data.cost,
+          category: data.category || '', distributor: data.distributor || '',
+          source: 'imported catalog'
+        };
       }
-    }catch(e){ /* ignore and fall through */ }
-
-    // UPCitemdb free trial: broader general-merchandise coverage, rate-limited,
-    // may fail depending on CORS — fails quietly if so.
-    try{
-      const r2 = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${encodeURIComponent(barcode)}`);
-      const data2 = await r2.json();
-      if(data2 && data2.code === 'OK' && data2.items && data2.items.length){
-        const item = data2.items[0];
-        if(item.title) return { name: item.title, source: 'UPCitemdb' };
-      }
-    }catch(e){ /* ignore */ }
-
+    }catch(e){ console.warn('Catalog lookup failed', e); }
     return null;
   }
 
@@ -543,9 +608,32 @@
     if(!currentEditId && barcode && !$('fieldName').value.trim()) runProductLookup(barcode);
   });
 
+  async function addLookupValue(kind){
+    const label = kind === 'category' ? 'category' : 'distributor';
+    const value = prompt(`Enter new ${label} name:`);
+    if(value == null) return;
+    const name = value.trim();
+    if(!name){ showToast(`Enter a ${label} name`); return; }
+    const table = kind === 'category' ? 'categories' : 'distributors';
+    const { error } = await supabaseClient.from(table).upsert({ name }, { onConflict: 'name' });
+    if(error){ showToast(error.message || `Could not add ${label}`); return; }
+    await loadLookupLists();
+    const field = kind === 'category' ? 'fieldCategory' : 'fieldDistributor';
+    $(field).value = name;
+    showToast(`${label.charAt(0).toUpperCase()+label.slice(1)} added`);
+  }
+  $('addCategoryBtn').addEventListener('click', ()=> addLookupValue('category'));
+  $('addDistributorBtn').addEventListener('click', ()=> addLookupValue('distributor'));
+
   $('panelSave').addEventListener('click', async ()=>{
     const barcode = $('fieldBarcode').value.trim();
     const name = $('fieldName').value.trim();
+    const priceRaw = $('fieldPrice').value.trim();
+    const costRaw = $('fieldCost').value.trim();
+    const price = priceRaw === '' ? null : Math.max(0, Number(priceRaw));
+    const cost = costRaw === '' ? null : Math.max(0, Number(costRaw));
+    const category = $('fieldCategory').value.trim();
+    const distributor = $('fieldDistributor').value.trim();
     const floorQty = Math.max(0, parseInt($('fieldFloorQty').value || '0', 10));
     const backroomQty = Math.max(0, parseInt($('fieldBackQty').value || '0', 10));
     const backroomCases = Math.max(0, parseInt($('fieldCases').value || '0', 10));
@@ -559,7 +647,7 @@
     if(dupe && dupe.id !== currentEditId){ showToast('That barcode is already in use'); return; }
 
     try{
-      const product = { barcode, name, floorQty, backroomQty, backroomCases, unitsPerCase, status };
+      const product = { barcode, name, price, cost, category, distributor, floorQty, backroomQty, backroomCases, unitsPerCase, status };
       if(currentEditId){
         await updateProduct(currentEditId, product);
         showToast('Updated in cloud');
@@ -607,14 +695,20 @@
     }
   });
 
-  function handleScannedCode(code){
+  async function handleScannedCode(code){
     const existing = findByBarcode(code);
-    if(existing){
-      openPanel(existing);
-    } else {
-      pendingBarcode = code;
-      openPanel(null, true);
+    if(existing){ openPanel(existing); return; }
+    setSyncState('Checking…');
+    const { data, error } = await supabaseClient.from('inventory').select('*').eq('barcode', code).maybeSingle();
+    if(!error && data){
+      const p = fromDb(data);
+      if(!inventory.some(x=>x.id===p.id)) inventory.push(p);
+      openPanel(p);
+      setSyncState('Cloud saved');
+      return;
     }
+    pendingBarcode = code;
+    openPanel(null, true);
   }
 
   // ---- Camera scanning (optional, phone camera) ----
@@ -668,7 +762,7 @@
     const wrap = $('listWrap');
     let items = inventory.slice().sort((a,b)=> b.updatedAt - a.updatedAt);
     if(q){
-      items = items.filter(p => p.name.toLowerCase().includes(q) || p.barcode.toLowerCase().includes(q));
+      items = items.filter(p => [p.name,p.barcode,p.category,p.distributor].some(v => String(v||'').toLowerCase().includes(q)));
     }
     if(items.length === 0){
       wrap.innerHTML = `<div class="empty"><div class="icon">📦</div><p>${inventory.length === 0 ? 'No products yet.<br>Scan or add your first item.' : 'No matches for that search.'}</p></div>`;
@@ -687,7 +781,7 @@
       <div class="row" data-id="${p.id}">
         <div class="info">
           <div class="name">${escapeHtml(p.name)}</div>
-          <div class="meta">${escapeHtml(p.barcode)}</div>
+          <div class="meta">${escapeHtml(p.barcode)}${p.category ? ` · ${escapeHtml(p.category)}` : ''}${p.distributor ? ` · ${escapeHtml(p.distributor)}` : ''}</div>
           ${cases > 0 ? `<span class="cases-flag">${cases} unopened case${cases === 1 ? '' : 's'}${p.unitsPerCase ? ` × ${p.unitsPerCase}` : ' — set units/case'}</span>` : ''}
         </div>
         <div class="right">
@@ -732,6 +826,10 @@
       .map(p => ({
         'Barcode': p.barcode,
         'Product Name': p.name,
+        'Price': p.price == null ? '' : p.price,
+        'Cost': p.cost == null ? '' : p.cost,
+        'Category': p.category || '',
+        'Distributor': p.distributor || '',
         'On Floor': p.floorQty || 0,
         'Back Room (open)': p.backroomQty || 0,
         'Unopened Cases': p.backroomCases || 0,
@@ -742,7 +840,7 @@
         'Last Updated': new Date(p.updatedAt).toLocaleString()
       }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{wch:16},{wch:32},{wch:9},{wch:14},{wch:12},{wch:11},{wch:12},{wch:13},{wch:14},{wch:20}];
+    ws['!cols'] = [{wch:16},{wch:32},{wch:10},{wch:10},{wch:18},{wch:20},{wch:9},{wch:14},{wch:12},{wch:11},{wch:12},{wch:13},{wch:14},{wch:20}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
     const dateStr = new Date().toISOString().slice(0,10);
