@@ -192,8 +192,32 @@
   .data-table th,.data-table td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:top;}
   .data-table th{font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;}
   .scroll-table{overflow:auto;max-height:420px;}
-  .alert-item{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:12px;}
+  .alert-item{display:grid;grid-template-columns:minmax(150px,1.6fr) minmax(90px,.8fr) minmax(85px,.7fr) minmax(100px,.9fr) auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:11.5px;}
   .alert-item:last-child{border-bottom:none;}
+  .alert-name{font-weight:700;min-width:0;}
+  .alert-name small{display:block;font-weight:400;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+  .alert-stock strong{display:block;font-family:'IBM Plex Mono',monospace;font-size:12px;}
+  .alert-stock small,.alert-extra{color:var(--ink-soft);font-size:10.5px;}
+  .alert-short{font-weight:700;color:var(--rust);white-space:nowrap;}
+  .alert-open{justify-self:end;white-space:nowrap;}
+  .collapse-card{padding:0;overflow:hidden;}
+  .collapse-card summary{list-style:none;cursor:pointer;padding:18px;display:flex;justify-content:space-between;align-items:center;font-size:16px;font-weight:700;}
+  .collapse-card summary::-webkit-details-marker{display:none;}
+  .collapse-card summary::after{content:'▾';font-size:14px;color:var(--ink-soft);transition:transform .15s;}
+  .collapse-card:not([open]) summary::after{transform:rotate(-90deg);}
+  .collapse-body{padding:0 18px 18px;border-top:1px solid var(--line);}
+  .collapse-body>p{margin-top:14px;}
+  .toggle-row{display:flex;justify-content:space-between;gap:12px;align-items:center;border:1px solid var(--line);border-radius:9px;padding:11px 12px;background:var(--paper);margin-bottom:10px;}
+  .toggle-row .toggle-copy{font-size:12px;font-weight:700;}
+  .toggle-row .toggle-copy small{display:block;font-weight:400;color:var(--ink-soft);margin-top:2px;}
+  .switch{position:relative;width:44px;height:24px;flex:0 0 auto;}
+  .switch input{opacity:0;width:0;height:0;}
+  .switch span{position:absolute;inset:0;background:#c9c8c1;border-radius:20px;transition:.2s;}
+  .switch span:before{content:'';position:absolute;width:18px;height:18px;left:3px;top:3px;background:white;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+  .switch input:checked+span{background:var(--green);}
+  .switch input:checked+span:before{transform:translateX(20px);}
+  .threshold-wrap.disabled{opacity:.45;pointer-events:none;}
+  @media(max-width:560px){.alert-item{grid-template-columns:minmax(0,1fr) auto auto}.alert-extra{display:none}.alert-open{grid-column:3}.alert-short{font-size:10.5px}}
   .role-chip{font-size:10px;font-family:'IBM Plex Mono',monospace;padding:3px 7px;border-radius:10px;background:#eee;color:var(--ink-soft);margin-left:6px;}
   .admin-only{display:none!important;}
   body.is-admin .admin-only{display:flex!important;}
@@ -337,19 +361,23 @@
         <div class="small-note" id="catalogImportStatus"></div>
       </div>
 
-      <div class="admin-card">
-        <h2>Category management</h2>
-        <p>Add, rename, merge, deactivate, or remove categories. Removing a category lets you move its products to another category or set them as uncategorized.</p>
-        <div class="admin-row"><input id="adminCategoryName" placeholder="New category"><button class="btn btn-line btn-sm" id="adminAddCategory">Add</button></div>
-        <div class="manager-list" id="adminCategoryList"></div>
-      </div>
+      <details class="admin-card collapse-card">
+        <summary>Category management</summary>
+        <div class="collapse-body">
+          <p>Add, rename, merge, deactivate, or remove categories. Removing a category lets you move its products to another category or set them as uncategorized.</p>
+          <div class="admin-row"><input id="adminCategoryName" placeholder="New category"><button class="btn btn-line btn-sm" id="adminAddCategory">Add</button></div>
+          <div class="manager-list" id="adminCategoryList"></div>
+        </div>
+      </details>
 
-      <div class="admin-card">
-        <h2>Distributor management</h2>
-        <p>Add, rename, merge, deactivate, or remove distributors. Removing one can reassign its products or leave them without a distributor.</p>
-        <div class="admin-row"><input id="adminDistributorName" placeholder="New distributor"><button class="btn btn-line btn-sm" id="adminAddDistributor">Add</button></div>
-        <div class="manager-list" id="adminDistributorList"></div>
-      </div>
+      <details class="admin-card collapse-card">
+        <summary>Distributor management</summary>
+        <div class="collapse-body">
+          <p>Add, rename, merge, deactivate, or remove distributors. Removing one can reassign its products or leave them without a distributor.</p>
+          <div class="admin-row"><input id="adminDistributorName" placeholder="New distributor"><button class="btn btn-line btn-sm" id="adminAddDistributor">Add</button></div>
+          <div class="manager-list" id="adminDistributorList"></div>
+        </div>
+      </details>
 
       <div class="admin-card">
         <h2>Low-stock alerts</h2>
@@ -457,9 +485,13 @@
         <label>Bottles (units) per case</label>
         <input type="number" id="fieldUnitsPerCase" value="" inputmode="numeric" placeholder="e.g. 12">
       </div>
-      <div class="field">
-        <label>Low-stock threshold</label>
-        <input type="number" id="fieldLowStock" min="0" value="0" inputmode="numeric" placeholder="0 disables alert">
+      <div class="toggle-row">
+        <div class="toggle-copy">Low-stock alert<small>Show this product on the Admin dashboard when stock reaches the threshold.</small></div>
+        <label class="switch"><input type="checkbox" id="fieldLowStockEnabled"><span></span></label>
+      </div>
+      <div class="field threshold-wrap" id="lowStockThresholdWrap">
+        <label>Alert when total stock is at or below</label>
+        <input type="number" id="fieldLowStock" min="0" value="0" inputmode="numeric" placeholder="e.g. 10">
       </div>
       <div class="total-line" id="totalLine">Total on hand: 0 units · 0 cases</div>
       <div class="field">
@@ -497,7 +529,7 @@
   function sync(text,error=false){$('syncState').textContent=text;$('syncState').style.color=error?'var(--rust)':'var(--green)'}
   function normalizeBarcode(v){return String(v??'').trim().replace(/\.0$/,'')}
   function sameBarcode(a,b){const x=normalizeBarcode(a),y=normalizeBarcode(b);return x===y||x.replace(/^0+/,'')===y.replace(/^0+/,'')}
-  function fromDb(r){return{id:r.id,barcode:r.barcode,name:r.name,price:r.price==null?null:Number(r.price),cost:r.cost==null?null:Number(r.cost),category:r.category||'',distributor:r.distributor||'',floorQty:r.floor_qty||0,backroomQty:r.backroom_qty||0,backroomCases:r.backroom_cases||0,unitsPerCase:r.units_per_case||0,lowStockThreshold:r.low_stock_threshold||0,status:r.status||'in_stock',updatedAt:new Date(r.updated_at).getTime(),updatedBy:r.updated_by}}
+  function fromDb(r){return{id:r.id,barcode:r.barcode,name:r.name,price:r.price==null?null:Number(r.price),cost:r.cost==null?null:Number(r.cost),category:r.category||'',distributor:r.distributor||'',floorQty:r.floor_qty||0,backroomQty:r.backroom_qty||0,backroomCases:r.backroom_cases||0,unitsPerCase:r.units_per_case||0,lowStockThreshold:r.low_stock_threshold||0,lowStockAlertEnabled:r.low_stock_alert_enabled!==false,status:r.status||'in_stock',updatedAt:new Date(r.updated_at).getTime(),updatedBy:r.updated_by}}
   const caseUnits=p=>(p.backroomCases||0)*(p.unitsPerCase||0);
   const totalUnits=p=>(p.floorQty||0)+(p.backroomQty||0)+caseUnits(p);
   function switchView(name){if(name==='admin'&&!isAdmin())name='scan';Object.entries(views).forEach(([k,v])=>v&&v.classList.toggle('active',k===name));navBtns.forEach(b=>b.classList.toggle('active',b.dataset.view===name));if(name==='inventory')renderList();if(name==='export')renderStats();if(name==='admin')renderAdmin();if(name==='scan')setTimeout(()=>$('gunInput').focus(),100)}
@@ -533,23 +565,25 @@
   $('quickCancel').addEventListener('click',()=>{$('quickAdjust').classList.remove('active');quickProduct=null});
   $('quickApply').addEventListener('click',async()=>{if(!quickProduct)return;const qty=Math.max(1,parseInt($('quickQty').value||1)),loc=$('quickLocation').value,sign=scanMode==='receive'?1:-1;let updates={};if(loc==='floor')updates.floor_qty=Math.max(0,quickProduct.floorQty+sign*qty);if(loc==='backroom')updates.backroom_qty=Math.max(0,quickProduct.backroomQty+sign*qty);if(loc==='cases')updates.backroom_cases=Math.max(0,quickProduct.backroomCases+sign*qty);updates.status=((updates.floor_qty??quickProduct.floorQty)+(updates.backroom_qty??quickProduct.backroomQty)+((updates.backroom_cases??quickProduct.backroomCases)*quickProduct.unitsPerCase)>0)?'in_stock':'out_of_stock';updates.updated_by=currentUser.id;updates.updated_at=new Date().toISOString();const {error}=await db.from('inventory').update(updates).eq('id',quickProduct.id);if(error){toast(error.message);return}await db.from('inventory_history').insert({inventory_id:quickProduct.id,barcode:quickProduct.barcode,product_name:quickProduct.name,action:scanMode,location:loc,quantity_change:sign*qty,changed_by:currentUser.id});toast(`${scanMode==='receive'?'Added':'Removed'} ${qty}`);$('quickAdjust').classList.remove('active');quickProduct=null;await loadInventory()});
   let lookupSeq=0;
-  function openPanel(p,auto=false){currentEditId=p?.id||null;$('panelTitle').textContent=p?'Edit product':'Add product';$('panelBarcode').textContent=p?.barcode||'New item';$('fieldBarcode').value=p?.barcode||pendingBarcode||'';$('fieldName').value=p?.name||'';$('fieldPrice').value=p?.price??'';$('fieldCost').value=p?.cost??'';fillSelect('fieldCategory',categories,p?.category||'','Uncategorized');fillSelect('fieldDistributor',distributors,p?.distributor||'','Not assigned');$('fieldFloorQty').value=p?.floorQty||0;$('fieldBackQty').value=p?.backroomQty||0;$('fieldCases').value=p?.backroomCases||0;$('fieldUnitsPerCase').value=p?.unitsPerCase||'';$('fieldLowStock').value=p?.lowStockThreshold||0;setStatus(p?.status||'in_stock');$('panelDelete').style.display=p&&isAdmin()?'block':'none';$('panelOverlay').classList.add('active');$('lookupStatus').textContent='';updateTotal();if(auto)runLookup($('fieldBarcode').value)}
+  function openPanel(p,auto=false){currentEditId=p?.id||null;$('panelTitle').textContent=p?'Edit product':'Add product';$('panelBarcode').textContent=p?.barcode||'New item';$('fieldBarcode').value=p?.barcode||pendingBarcode||'';$('fieldName').value=p?.name||'';$('fieldPrice').value=p?.price??'';$('fieldCost').value=p?.cost??'';fillSelect('fieldCategory',categories,p?.category||'','Uncategorized');fillSelect('fieldDistributor',distributors,p?.distributor||'','Not assigned');$('fieldFloorQty').value=p?.floorQty||0;$('fieldBackQty').value=p?.backroomQty||0;$('fieldCases').value=p?.backroomCases||0;$('fieldUnitsPerCase').value=p?.unitsPerCase||'';$('fieldLowStockEnabled').checked=p?.lowStockAlertEnabled??true;$('fieldLowStock').value=p?.lowStockThreshold||0;syncLowStockFields();setStatus(p?.status||'in_stock');$('panelDelete').style.display=p&&isAdmin()?'block':'none';$('panelOverlay').classList.add('active');$('lookupStatus').textContent='';updateTotal();if(auto)runLookup($('fieldBarcode').value)}
   async function runLookup(code){const seq=++lookupSeq;$('lookupStatus').textContent='Looking up imported catalog…';try{const d=await lookupCatalog(code);if(seq!==lookupSeq||currentEditId)return;if(d){$('fieldName').value=d.product_name||'';$('fieldPrice').value=d.price??'';$('fieldCost').value=d.cost??'';fillSelect('fieldCategory',categories,d.category||'','Uncategorized');fillSelect('fieldDistributor',distributors,d.distributor||'','Not assigned');$('lookupStatus').textContent='Found in imported catalog';$('lookupStatus').classList.add('found')}else $('lookupStatus').textContent='No catalog match — enter details manually'}catch(e){$('lookupStatus').textContent=`Catalog error: ${e.message}`}}
   function setStatus(s){$('statusInBtn').classList.toggle('on',s==='in_stock');$('statusOutBtn').classList.toggle('on',s==='out_of_stock')}
   $('statusInBtn').onclick=()=>setStatus('in_stock');$('statusOutBtn').onclick=()=>setStatus('out_of_stock');
   function updateTotal(){const f=+$('fieldFloorQty').value||0,b=+$('fieldBackQty').value||0,c=+$('fieldCases').value||0,u=+$('fieldUnitsPerCase').value||0;$('totalLine').textContent=`Total on hand: ${f+b+c*u} units · ${c} unopened case${c===1?'':'s'}`}
+  function syncLowStockFields(){$('lowStockThresholdWrap').classList.toggle('disabled',!$('fieldLowStockEnabled').checked)}
+  $('fieldLowStockEnabled').onchange=syncLowStockFields;
   [['floorMinus','floorPlus','fieldFloorQty'],['backMinus','backPlus','fieldBackQty'],['casesMinus','casesPlus','fieldCases']].forEach(([m,p,f])=>{$(m).onclick=()=>{$(f).value=Math.max(0,(+$(f).value||0)-1);updateTotal()};$(p).onclick=()=>{$(f).value=(+$(f).value||0)+1;updateTotal()};$(f).oninput=updateTotal});$('fieldUnitsPerCase').oninput=updateTotal;
   function closePanel(){$('panelOverlay').classList.remove('active');currentEditId=null;pendingBarcode=null}
   $('panelCancel').onclick=closePanel;$('panelOverlay').onclick=e=>{if(e.target.id==='panelOverlay')closePanel()};$('manualAddBtn').onclick=()=>openPanel(null);
   async function addList(kind,nameOverride){if(!isAdmin()){toast('Admin access required');return}const label=kind==='category'?'category':'distributor',name=(nameOverride??prompt(`Enter new ${label}:`)??'').trim();if(!name)return;const table=kind==='category'?'categories':'distributors';const {error}=await db.from(table).upsert({name,active:true,created_by:currentUser.id},{onConflict:'name'});if(error){toast(error.message);return}await loadLists();toast(`${label} added`)}
   $('addCategoryBtn').onclick=()=>addList('category');$('addDistributorBtn').onclick=()=>addList('distributor');
-  $('panelSave').onclick=async()=>{const product={barcode:normalizeBarcode($('fieldBarcode').value),name:$('fieldName').value.trim(),price:$('fieldPrice').value===''?null:Math.max(0,+$('fieldPrice').value),cost:$('fieldCost').value===''?null:Math.max(0,+$('fieldCost').value),category:$('fieldCategory').value||null,distributor:$('fieldDistributor').value||null,floor_qty:Math.max(0,+$('fieldFloorQty').value||0),backroom_qty:Math.max(0,+$('fieldBackQty').value||0),backroom_cases:Math.max(0,+$('fieldCases').value||0),units_per_case:Math.max(0,+$('fieldUnitsPerCase').value||0),low_stock_threshold:Math.max(0,+$('fieldLowStock').value||0),status:$('statusOutBtn').classList.contains('on')?'out_of_stock':'in_stock',updated_by:currentUser.id,updated_at:new Date().toISOString()};if(!product.barcode||!product.name){toast('Barcode and product name are required');return}let error;if(currentEditId){({error}=await db.from('inventory').update(product).eq('id',currentEditId));if(!error)await db.from('inventory_history').insert({inventory_id:currentEditId,barcode:product.barcode,product_name:product.name,action:'edit',location:'all',quantity_change:0,changed_by:currentUser.id})}else{const r=await db.from('inventory').insert(product).select('id').single();error=r.error;if(!error)await db.from('inventory_history').insert({inventory_id:r.data.id,barcode:product.barcode,product_name:product.name,action:'create',location:'all',quantity_change:product.floor_qty+product.backroom_qty+product.backroom_cases*product.units_per_case,changed_by:currentUser.id})}if(error){toast(error.message);return}closePanel();toast('Saved');await loadInventory()};
+  $('panelSave').onclick=async()=>{const product={barcode:normalizeBarcode($('fieldBarcode').value),name:$('fieldName').value.trim(),price:$('fieldPrice').value===''?null:Math.max(0,+$('fieldPrice').value),cost:$('fieldCost').value===''?null:Math.max(0,+$('fieldCost').value),category:$('fieldCategory').value||null,distributor:$('fieldDistributor').value||null,floor_qty:Math.max(0,+$('fieldFloorQty').value||0),backroom_qty:Math.max(0,+$('fieldBackQty').value||0),backroom_cases:Math.max(0,+$('fieldCases').value||0),units_per_case:Math.max(0,+$('fieldUnitsPerCase').value||0),low_stock_threshold:Math.max(0,+$('fieldLowStock').value||0),low_stock_alert_enabled:$('fieldLowStockEnabled').checked,status:$('statusOutBtn').classList.contains('on')?'out_of_stock':'in_stock',updated_by:currentUser.id,updated_at:new Date().toISOString()};if(!product.barcode||!product.name){toast('Barcode and product name are required');return}let error;if(currentEditId){({error}=await db.from('inventory').update(product).eq('id',currentEditId));if(!error)await db.from('inventory_history').insert({inventory_id:currentEditId,barcode:product.barcode,product_name:product.name,action:'edit',location:'all',quantity_change:0,changed_by:currentUser.id})}else{const r=await db.from('inventory').insert(product).select('id').single();error=r.error;if(!error)await db.from('inventory_history').insert({inventory_id:r.data.id,barcode:product.barcode,product_name:product.name,action:'create',location:'all',quantity_change:product.floor_qty+product.backroom_qty+product.backroom_cases*product.units_per_case,changed_by:currentUser.id})}if(error){toast(error.message);return}closePanel();toast('Saved');await loadInventory()};
   $('panelDelete').onclick=async()=>{if(!isAdmin()||!currentEditId)return;const p=inventory.find(x=>x.id===currentEditId);const {error}=await db.from('inventory').delete().eq('id',currentEditId);if(error){toast(error.message);return}await db.from('inventory_history').insert({inventory_id:null,barcode:p.barcode,product_name:p.name,action:'delete',location:'all',quantity_change:-totalUnits(p),changed_by:currentUser.id});closePanel();await loadInventory()};
   $('searchInput').oninput=renderList;
   function renderList(){const q=$('searchInput').value.trim().toLowerCase();let rows=inventory.filter(p=>!q||[p.name,p.barcode,p.category,p.distributor].some(v=>String(v||'').toLowerCase().includes(q)));$('listWrap').innerHTML=rows.length?rows.map(p=>`<div class="row" data-id="${p.id}"><div class="info"><div class="name">${esc(p.name)}</div><div class="meta">${esc(p.barcode)}${p.category?' · '+esc(p.category):''}${p.distributor?' · '+esc(p.distributor):''}</div></div><div class="right"><div><div class="qty">${totalUnits(p)}</div><div class="loc">F ${p.floorQty} · B ${p.backroomQty}</div></div><span class="badge ${p.status==='out_of_stock'?'out':'in'}">${p.status==='out_of_stock'?'Out':'In stock'}</span></div></div>`).join(''):`<div class="empty"><div class="icon">📦</div><p>No matching products.</p></div>`;document.querySelectorAll('#listWrap .row').forEach(r=>r.onclick=()=>openPanel(inventory.find(p=>p.id===r.dataset.id)))}
   function stats(filtered=inventory){return{products:filtered.length,units:filtered.reduce((s,p)=>s+totalUnits(p),0),cases:filtered.reduce((s,p)=>s+p.backroomCases,0),out:filtered.filter(p=>totalUnits(p)<=0).length,retail:filtered.reduce((s,p)=>s+totalUnits(p)*(p.price||0),0),cost:filtered.reduce((s,p)=>s+totalUnits(p)*(p.cost||0),0)}}
   function renderStats(){const s=stats();$('statTotal').textContent=s.products;$('statUnits').textContent=s.units;$('statCases').textContent=s.cases;$('statOut').textContent=s.out}
-  $('exportBtn').onclick=()=>{if(!inventory.length)return toast('Nothing to export');const rows=inventory.map(p=>({'Barcode':p.barcode,'Product Name':p.name,'Price':p.price??'','Cost':p.cost??'','Category':p.category,'Distributor':p.distributor,'On Floor':p.floorQty,'Back Room':p.backroomQty,'Cases':p.backroomCases,'Units per Case':p.unitsPerCase,'Total Units':totalUnits(p),'Retail Value':totalUnits(p)*(p.price||0),'Cost Value':totalUnits(p)*(p.cost||0),'Low Stock Threshold':p.lowStockThreshold,'Status':p.status}));const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Inventory');XLSX.writeFile(wb,`shelf-inventory-${new Date().toISOString().slice(0,10)}.xlsx`)};
+  $('exportBtn').onclick=()=>{if(!inventory.length)return toast('Nothing to export');const rows=inventory.map(p=>({'Barcode':p.barcode,'Product Name':p.name,'Price':p.price??'','Cost':p.cost??'','Category':p.category,'Distributor':p.distributor,'On Floor':p.floorQty,'Back Room':p.backroomQty,'Cases':p.backroomCases,'Units per Case':p.unitsPerCase,'Total Units':totalUnits(p),'Retail Value':totalUnits(p)*(p.price||0),'Cost Value':totalUnits(p)*(p.cost||0),'Low Stock Alert':p.lowStockAlertEnabled?'On':'Off','Low Stock Threshold':p.lowStockThreshold,'Status':p.status}));const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Inventory');XLSX.writeFile(wb,`shelf-inventory-${new Date().toISOString().slice(0,10)}.xlsx`)};
   function usageCount(kind,name){
     const inv=inventory.filter(p=>(kind==='category'?p.category:p.distributor)===name).length;
     return {inventory:inv};
@@ -586,7 +620,7 @@
     $('manageConfirm').disabled=true;const {error}=await db.rpc('manage_reference_value',params);$('manageConfirm').disabled=false;
     if(error){toast(error.message);return}closeManage();await loadInventory();toast(`${kind==='category'?'Category':'Distributor'} updated`);
   };
-  async function renderAdmin(){if(!isAdmin())return;const s=stats();$('dashProducts').textContent=s.products;$('dashUnits').textContent=s.units;$('dashRetail').textContent=money.format(s.retail);$('dashCost').textContent=money.format(s.cost);$('dashProfit').textContent=money.format(s.retail-s.cost);renderManager('category');renderManager('distributor');const low=inventory.filter(p=>p.lowStockThreshold>0&&totalUnits(p)<=p.lowStockThreshold);$('lowStockList').innerHTML=low.length?low.map(p=>`<div class="alert-item"><span>${esc(p.name)}</span><strong>${totalUnits(p)} / ${p.lowStockThreshold}</strong></div>`).join(''):'<div class="small-note">No low-stock products.</div>';renderReports();const {data}=await db.from('inventory_history').select('*').order('changed_at',{ascending:false}).limit(100);$('historyRows').innerHTML=(data||[]).map(h=>`<tr><td>${new Date(h.changed_at).toLocaleString()}</td><td>${esc(h.product_name||h.barcode)}</td><td>${esc(h.action)}</td><td>${h.quantity_change>0?'+':''}${h.quantity_change} ${esc(h.location||'')}</td><td>${esc(h.changed_by_email||'User')}</td></tr>`).join('')||'<tr><td colspan="5">No history yet.</td></tr>'}
+  async function renderAdmin(){if(!isAdmin())return;const s=stats();$('dashProducts').textContent=s.products;$('dashUnits').textContent=s.units;$('dashRetail').textContent=money.format(s.retail);$('dashCost').textContent=money.format(s.cost);$('dashProfit').textContent=money.format(s.retail-s.cost);renderManager('category');renderManager('distributor');const low=inventory.filter(p=>p.lowStockAlertEnabled&&p.lowStockThreshold>0&&totalUnits(p)<=p.lowStockThreshold).sort((a,b)=>(b.lowStockThreshold-totalUnits(b))-(a.lowStockThreshold-totalUnits(a)));$('lowStockList').innerHTML=low.length?low.map(p=>{const current=totalUnits(p),needed=Math.max(0,p.lowStockThreshold-current);return`<div class="alert-item"><div class="alert-name">${esc(p.name)}<small>${esc(p.barcode)}${p.category?' · '+esc(p.category):''}</small></div><div class="alert-stock"><strong>${current} / ${p.lowStockThreshold}</strong><small>Current / threshold</small></div><div class="alert-short">Need ${needed} more</div><div class="alert-extra">${esc(p.distributor||'No distributor')}</div><button class="mini-btn alert-open" data-low-id="${p.id}">Open</button></div>`}).join(''):'<div class="small-note">No low-stock products.</div>';document.querySelectorAll('[data-low-id]').forEach(b=>b.onclick=()=>openPanel(inventory.find(p=>p.id===b.dataset.lowId)));renderReports();const {data}=await db.from('inventory_history').select('*').order('changed_at',{ascending:false}).limit(100);$('historyRows').innerHTML=(data||[]).map(h=>`<tr><td>${new Date(h.changed_at).toLocaleString()}</td><td>${esc(h.product_name||h.barcode)}</td><td>${esc(h.action)}</td><td>${h.quantity_change>0?'+':''}${h.quantity_change} ${esc(h.location||'')}</td><td>${esc(h.changed_by_email||'User')}</td></tr>`).join('')||'<tr><td colspan="5">No history yet.</td></tr>'}
   function renderReports(){const cat=$('reportCategory').value,dist=$('reportDistributor').value,filtered=inventory.filter(p=>(!cat||p.category===cat)&&(!dist||p.distributor===dist)),groups={};filtered.forEach(p=>{const k=p.category||'Uncategorized';(groups[k]??=[]).push(p)});$('reportRows').innerHTML=Object.entries(groups).sort().map(([k,v])=>{const s=stats(v);return`<tr><td>${esc(k)}</td><td>${s.products}</td><td>${s.units}</td><td>${money.format(s.retail)}</td><td>${money.format(s.cost)}</td></tr>`}).join('')||'<tr><td colspan="5">No report data.</td></tr>'}
   $('reportCategory').onchange=renderReports;$('reportDistributor').onchange=renderReports;
   $('adminAddCategory').onclick=async()=>{await addList('category',$('adminCategoryName').value);$('adminCategoryName').value='';if(isAdmin())renderAdmin()};$('adminAddDistributor').onclick=async()=>{await addList('distributor',$('adminDistributorName').value);$('adminDistributorName').value='';if(isAdmin())renderAdmin()};
