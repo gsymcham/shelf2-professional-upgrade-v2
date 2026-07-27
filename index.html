@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
-<title>Shelf — Inventory</title>
+<title>Shelf — Inventory Pro V3</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
@@ -202,6 +202,25 @@
   .small-note{font-size:11px;color:var(--ink-soft);line-height:1.45;}
   .report-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
 
+  .manager-list{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+  .manager-item{border:1px solid var(--line);border-radius:10px;padding:11px;background:var(--paper);}
+  .manager-main{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;}
+  .manager-name{font-weight:700;font-size:13px;word-break:break-word;}
+  .manager-meta{font-size:10.5px;color:var(--ink-soft);margin-top:3px;}
+  .manager-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+  .mini-btn{border:1px solid var(--line);background:var(--panel);border-radius:7px;padding:6px 8px;font-size:10.5px;font-weight:700;}
+  .mini-btn.danger{color:var(--rust);border-color:#e6b7aa;}
+  .mini-btn.warn{color:#74510d;border-color:#e5c779;}
+  .inactive-row{opacity:.58;}
+  .management-note{font-size:11px;color:var(--ink-soft);line-height:1.45;margin-top:8px;}
+  .modal-overlay{position:fixed;inset:0;background:rgba(27,27,24,.52);display:none;align-items:center;justify-content:center;padding:20px;z-index:80;}
+  .modal-overlay.active{display:flex;}
+  .modal-card{width:100%;max-width:430px;background:var(--panel);border-radius:16px;padding:20px;border:1px solid var(--line);max-height:86vh;overflow:auto;}
+  .modal-card h2{margin:0 0 6px;font-size:18px;}
+  .modal-card p{font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin:0 0 14px;}
+  .modal-actions{display:flex;gap:9px;margin-top:16px;}
+  .modal-actions button{flex:1;}
+
 </style>
 </head>
 <body>
@@ -320,14 +339,16 @@
 
       <div class="admin-card">
         <h2>Category management</h2>
+        <p>Add, rename, merge, deactivate, or remove categories. Removing a category lets you move its products to another category or set them as uncategorized.</p>
         <div class="admin-row"><input id="adminCategoryName" placeholder="New category"><button class="btn btn-line btn-sm" id="adminAddCategory">Add</button></div>
-        <div class="small-note" id="adminCategoryList"></div>
+        <div class="manager-list" id="adminCategoryList"></div>
       </div>
 
       <div class="admin-card">
         <h2>Distributor management</h2>
+        <p>Add, rename, merge, deactivate, or remove distributors. Removing one can reassign its products or leave them without a distributor.</p>
         <div class="admin-row"><input id="adminDistributorName" placeholder="New distributor"><button class="btn btn-line btn-sm" id="adminAddDistributor">Add</button></div>
-        <div class="small-note" id="adminDistributorList"></div>
+        <div class="manager-list" id="adminDistributorList"></div>
       </div>
 
       <div class="admin-card">
@@ -357,6 +378,17 @@
       <button class="navbtn admin-only" data-view="admin"><span class="ic">⚙</span>Admin</button>
     </div>
   </nav>
+
+  <div class="modal-overlay" id="manageModal">
+    <div class="modal-card">
+      <h2 id="manageModalTitle">Manage value</h2>
+      <p id="manageModalText"></p>
+      <div class="field" id="manageNameWrap"><label>New name</label><input id="manageNameInput"></div>
+      <div class="field" id="manageTargetWrap"><label id="manageTargetLabel">Move products to</label><select id="manageTargetSelect"></select></div>
+      <div class="management-note" id="manageModalNote"></div>
+      <div class="modal-actions"><button class="btn btn-line" id="manageCancel">Cancel</button><button class="btn btn-amber" id="manageConfirm">Continue</button></div>
+    </div>
+  </div>
 
   <div class="panel-overlay" id="panelOverlay">
     <div class="panel">
@@ -455,7 +487,7 @@
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhbHJ0a2R2ZHRrcW12a2pmdXVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwOTEyMjQsImV4cCI6MjEwMDY2NzIyNH0.5gYn9PvkMZFk922qULn4GmCQvgUnHeiES4mSEVe5q0w';
   const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
   const $=id=>document.getElementById(id);
-  let inventory=[],categories=[],distributors=[],currentUser=null,userRole='staff',channel=null,currentEditId=null,pendingBarcode=null,scanMode='edit',quickProduct=null,authMode='signin',html5QrCode=null,camRunning=false;
+  let inventory=[],categories=[],distributors=[],categoryRecords=[],distributorRecords=[],manageState=null,currentUser=null,userRole='staff',channel=null,currentEditId=null,pendingBarcode=null,scanMode='edit',quickProduct=null,authMode='signin',html5QrCode=null,camRunning=false;
   const money=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
   const views={scan:$('view-scan'),inventory:$('view-inventory'),export:$('view-export'),admin:$('view-admin')};
   const navBtns=[...document.querySelectorAll('.navbtn')];
@@ -473,7 +505,23 @@
   function applyRoleUI(){document.body.classList.toggle('is-admin',isAdmin());$('roleChip').style.display='inline-block';$('roleChip').textContent=isAdmin()?'ADMIN':'STAFF';$('addCategoryBtn').style.display=isAdmin()?'block':'none';$('addDistributorBtn').style.display=isAdmin()?'block':'none'}
   async function loadRole(){userRole='staff';if(!currentUser)return;const {data,error}=await db.from('profiles').select('role').eq('id',currentUser.id).maybeSingle();if(!error&&data?.role)userRole=data.role;applyRoleUI()}
   function fillSelect(id,vals,selected,label){const el=$(id);if(!el)return;const clean=[...new Set((vals||[]).filter(Boolean))].sort((a,b)=>a.localeCompare(b));el.innerHTML=`<option value="">${esc(label)}</option>`+clean.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');if(selected&&!clean.includes(selected))el.insertAdjacentHTML('beforeend',`<option value="${esc(selected)}">${esc(selected)}</option>`);el.value=selected||''}
-  async function loadLists(){const [a,b,c,d]=await Promise.all([db.from('categories').select('name').order('name'),db.from('distributors').select('name').order('name'),db.from('inventory').select('category,distributor'),db.from('product_catalog').select('category,distributor')]);categories=[...new Set([...(a.data||[]).map(x=>x.name),...(c.data||[]).map(x=>x.category),...(d.data||[]).map(x=>x.category)].filter(Boolean))];distributors=[...new Set([...(b.data||[]).map(x=>x.name),...(c.data||[]).map(x=>x.distributor),...(d.data||[]).map(x=>x.distributor)].filter(Boolean))];fillSelect('fieldCategory',categories,$('fieldCategory').value,'Uncategorized');fillSelect('fieldDistributor',distributors,$('fieldDistributor').value,'Not assigned');fillSelect('reportCategory',categories,$('reportCategory')?.value,'All categories');fillSelect('reportDistributor',distributors,$('reportDistributor')?.value,'All distributors')}
+  async function loadLists(){
+    const [a,b,c,d]=await Promise.all([
+      db.from('categories').select('id,name,active,created_at').order('name'),
+      db.from('distributors').select('id,name,active,created_at').order('name'),
+      db.from('inventory').select('category,distributor'),
+      db.from('product_catalog').select('category,distributor')
+    ]);
+    categoryRecords=(a.data||[]).map(x=>({...x,active:x.active!==false}));
+    distributorRecords=(b.data||[]).map(x=>({...x,active:x.active!==false}));
+    const activeCats=categoryRecords.filter(x=>x.active).map(x=>x.name), activeDists=distributorRecords.filter(x=>x.active).map(x=>x.name);
+    categories=[...new Set(activeCats.filter(Boolean))];
+    distributors=[...new Set(activeDists.filter(Boolean))];
+    fillSelect('fieldCategory',categories,$('fieldCategory').value,'Uncategorized');
+    fillSelect('fieldDistributor',distributors,$('fieldDistributor').value,'Not assigned');
+    fillSelect('reportCategory',categories,$('reportCategory')?.value,'All categories');
+    fillSelect('reportDistributor',distributors,$('reportDistributor')?.value,'All distributors');
+  }
   async function loadInventory(){if(!currentUser)return;sync('Syncing…');const {data,error}=await db.from('inventory').select('*').order('updated_at',{ascending:false});if(error){sync('Sync failed',true);toast(error.message);return}inventory=(data||[]).map(fromDb);await loadLists();$('headerCount').textContent=`${inventory.length} item${inventory.length===1?'':'s'}`;renderList();renderStats();if(isAdmin())await renderAdmin();sync('Live')}
   function subscribe(){if(channel)db.removeChannel(channel);channel=db.channel('inventory-live').on('postgres_changes',{event:'*',schema:'public',table:'inventory'},()=>loadInventory()).subscribe()}
   function findProduct(code){return inventory.find(p=>sameBarcode(p.barcode,code))}
@@ -493,7 +541,7 @@
   [['floorMinus','floorPlus','fieldFloorQty'],['backMinus','backPlus','fieldBackQty'],['casesMinus','casesPlus','fieldCases']].forEach(([m,p,f])=>{$(m).onclick=()=>{$(f).value=Math.max(0,(+$(f).value||0)-1);updateTotal()};$(p).onclick=()=>{$(f).value=(+$(f).value||0)+1;updateTotal()};$(f).oninput=updateTotal});$('fieldUnitsPerCase').oninput=updateTotal;
   function closePanel(){$('panelOverlay').classList.remove('active');currentEditId=null;pendingBarcode=null}
   $('panelCancel').onclick=closePanel;$('panelOverlay').onclick=e=>{if(e.target.id==='panelOverlay')closePanel()};$('manualAddBtn').onclick=()=>openPanel(null);
-  async function addList(kind,nameOverride){if(!isAdmin()){toast('Admin access required');return}const label=kind==='category'?'category':'distributor',name=(nameOverride??prompt(`Enter new ${label}:`)??'').trim();if(!name)return;const table=kind==='category'?'categories':'distributors';const {error}=await db.from(table).upsert({name,created_by:currentUser.id},{onConflict:'name'});if(error){toast(error.message);return}await loadLists();toast(`${label} added`)}
+  async function addList(kind,nameOverride){if(!isAdmin()){toast('Admin access required');return}const label=kind==='category'?'category':'distributor',name=(nameOverride??prompt(`Enter new ${label}:`)??'').trim();if(!name)return;const table=kind==='category'?'categories':'distributors';const {error}=await db.from(table).upsert({name,active:true,created_by:currentUser.id},{onConflict:'name'});if(error){toast(error.message);return}await loadLists();toast(`${label} added`)}
   $('addCategoryBtn').onclick=()=>addList('category');$('addDistributorBtn').onclick=()=>addList('distributor');
   $('panelSave').onclick=async()=>{const product={barcode:normalizeBarcode($('fieldBarcode').value),name:$('fieldName').value.trim(),price:$('fieldPrice').value===''?null:Math.max(0,+$('fieldPrice').value),cost:$('fieldCost').value===''?null:Math.max(0,+$('fieldCost').value),category:$('fieldCategory').value||null,distributor:$('fieldDistributor').value||null,floor_qty:Math.max(0,+$('fieldFloorQty').value||0),backroom_qty:Math.max(0,+$('fieldBackQty').value||0),backroom_cases:Math.max(0,+$('fieldCases').value||0),units_per_case:Math.max(0,+$('fieldUnitsPerCase').value||0),low_stock_threshold:Math.max(0,+$('fieldLowStock').value||0),status:$('statusOutBtn').classList.contains('on')?'out_of_stock':'in_stock',updated_by:currentUser.id,updated_at:new Date().toISOString()};if(!product.barcode||!product.name){toast('Barcode and product name are required');return}let error;if(currentEditId){({error}=await db.from('inventory').update(product).eq('id',currentEditId));if(!error)await db.from('inventory_history').insert({inventory_id:currentEditId,barcode:product.barcode,product_name:product.name,action:'edit',location:'all',quantity_change:0,changed_by:currentUser.id})}else{const r=await db.from('inventory').insert(product).select('id').single();error=r.error;if(!error)await db.from('inventory_history').insert({inventory_id:r.data.id,barcode:product.barcode,product_name:product.name,action:'create',location:'all',quantity_change:product.floor_qty+product.backroom_qty+product.backroom_cases*product.units_per_case,changed_by:currentUser.id})}if(error){toast(error.message);return}closePanel();toast('Saved');await loadInventory()};
   $('panelDelete').onclick=async()=>{if(!isAdmin()||!currentEditId)return;const p=inventory.find(x=>x.id===currentEditId);const {error}=await db.from('inventory').delete().eq('id',currentEditId);if(error){toast(error.message);return}await db.from('inventory_history').insert({inventory_id:null,barcode:p.barcode,product_name:p.name,action:'delete',location:'all',quantity_change:-totalUnits(p),changed_by:currentUser.id});closePanel();await loadInventory()};
@@ -502,10 +550,46 @@
   function stats(filtered=inventory){return{products:filtered.length,units:filtered.reduce((s,p)=>s+totalUnits(p),0),cases:filtered.reduce((s,p)=>s+p.backroomCases,0),out:filtered.filter(p=>totalUnits(p)<=0).length,retail:filtered.reduce((s,p)=>s+totalUnits(p)*(p.price||0),0),cost:filtered.reduce((s,p)=>s+totalUnits(p)*(p.cost||0),0)}}
   function renderStats(){const s=stats();$('statTotal').textContent=s.products;$('statUnits').textContent=s.units;$('statCases').textContent=s.cases;$('statOut').textContent=s.out}
   $('exportBtn').onclick=()=>{if(!inventory.length)return toast('Nothing to export');const rows=inventory.map(p=>({'Barcode':p.barcode,'Product Name':p.name,'Price':p.price??'','Cost':p.cost??'','Category':p.category,'Distributor':p.distributor,'On Floor':p.floorQty,'Back Room':p.backroomQty,'Cases':p.backroomCases,'Units per Case':p.unitsPerCase,'Total Units':totalUnits(p),'Retail Value':totalUnits(p)*(p.price||0),'Cost Value':totalUnits(p)*(p.cost||0),'Low Stock Threshold':p.lowStockThreshold,'Status':p.status}));const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Inventory');XLSX.writeFile(wb,`shelf-inventory-${new Date().toISOString().slice(0,10)}.xlsx`)};
-  async function renderAdmin(){if(!isAdmin())return;const s=stats();$('dashProducts').textContent=s.products;$('dashUnits').textContent=s.units;$('dashRetail').textContent=money.format(s.retail);$('dashCost').textContent=money.format(s.cost);$('dashProfit').textContent=money.format(s.retail-s.cost);$('adminCategoryList').textContent=categories.length?categories.join(' · '):'No categories yet';$('adminDistributorList').textContent=distributors.length?distributors.join(' · '):'No distributors yet';const low=inventory.filter(p=>p.lowStockThreshold>0&&totalUnits(p)<=p.lowStockThreshold);$('lowStockList').innerHTML=low.length?low.map(p=>`<div class="alert-item"><span>${esc(p.name)}</span><strong>${totalUnits(p)} / ${p.lowStockThreshold}</strong></div>`).join(''):'<div class="small-note">No low-stock products.</div>';renderReports();const {data}=await db.from('inventory_history').select('*').order('changed_at',{ascending:false}).limit(100);$('historyRows').innerHTML=(data||[]).map(h=>`<tr><td>${new Date(h.changed_at).toLocaleString()}</td><td>${esc(h.product_name||h.barcode)}</td><td>${esc(h.action)}</td><td>${h.quantity_change>0?'+':''}${h.quantity_change} ${esc(h.location||'')}</td><td>${esc(h.changed_by_email||'User')}</td></tr>`).join('')||'<tr><td colspan="5">No history yet.</td></tr>'}
+  function usageCount(kind,name){
+    const inv=inventory.filter(p=>(kind==='category'?p.category:p.distributor)===name).length;
+    return {inventory:inv};
+  }
+  function renderManager(kind){
+    const records=kind==='category'?categoryRecords:distributorRecords;
+    const el=$(kind==='category'?'adminCategoryList':'adminDistributorList');
+    if(!records.length){el.innerHTML='<div class="small-note">No entries yet.</div>';return;}
+    el.innerHTML=records.map(r=>{const u=usageCount(kind,r.name);return `<div class="manager-item ${r.active?'':'inactive-row'}"><div class="manager-main"><div><div class="manager-name">${esc(r.name)}</div><div class="manager-meta">${u.inventory} live inventory product${u.inventory===1?'':'s'} · ${r.active?'Active':'Inactive'}</div></div><div class="manager-actions"><button class="mini-btn" data-manage="rename" data-kind="${kind}" data-name="${esc(r.name)}">Rename</button><button class="mini-btn" data-manage="merge" data-kind="${kind}" data-name="${esc(r.name)}">Merge</button><button class="mini-btn warn" data-manage="toggle" data-kind="${kind}" data-name="${esc(r.name)}">${r.active?'Deactivate':'Activate'}</button><button class="mini-btn danger" data-manage="remove" data-kind="${kind}" data-name="${esc(r.name)}">Remove</button></div></div></div>`}).join('');
+    el.querySelectorAll('[data-manage]').forEach(b=>b.onclick=()=>openManage(b.dataset.kind,b.dataset.manage,b.dataset.name));
+  }
+  function openManage(kind,action,source){
+    const records=kind==='category'?categoryRecords:distributorRecords, label=kind==='category'?'category':'distributor';
+    manageState={kind,action,source};$('manageModal').classList.add('active');$('manageNameWrap').style.display=action==='rename'?'block':'none';$('manageTargetWrap').style.display=['merge','remove'].includes(action)?'block':'none';
+    $('manageNameInput').value=action==='rename'?source:'';
+    const alternatives=records.filter(r=>r.name!==source&&r.active).map(r=>r.name);
+    $('manageTargetSelect').innerHTML=(action==='remove'?`<option value="">${kind==='category'?'Set as Uncategorized':'Set as None'}</option>`:'')+alternatives.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    const count=usageCount(kind,source).inventory;
+    if(action==='rename'){$('manageModalTitle').textContent=`Rename ${label}`;$('manageModalText').textContent=`Rename “${source}” everywhere it is used.`;$('manageConfirm').textContent='Rename'}
+    if(action==='merge'){$('manageModalTitle').textContent=`Merge ${label}`;$('manageModalText').textContent=`Move all products from “${source}” into another ${label}, then remove “${source}”.`;$('manageConfirm').textContent='Merge'}
+    if(action==='toggle'){$('manageModalTitle').textContent=`${records.find(r=>r.name===source)?.active?'Deactivate':'Activate'} ${label}`;$('manageModalText').textContent=`Inactive entries stay on existing products but no longer appear as choices for new assignments.`;$('manageConfirm').textContent=records.find(r=>r.name===source)?.active?'Deactivate':'Activate'}
+    if(action==='remove'){$('manageModalTitle').textContent=`Remove ${label}`;$('manageModalText').textContent=`“${source}” is used by ${count} live inventory product${count===1?'':'s'}. Choose where those products should go before removal.`;$('manageConfirm').textContent='Remove'}
+    $('manageModalNote').textContent=action==='merge'&&!alternatives.length?`Create another active ${label} before merging.`:'';
+    $('manageConfirm').disabled=action==='merge'&&!alternatives.length;
+  }
+  function closeManage(){$('manageModal').classList.remove('active');manageState=null;$('manageConfirm').disabled=false}
+  $('manageCancel').onclick=closeManage;$('manageModal').onclick=e=>{if(e.target===$('manageModal'))closeManage()};
+  $('manageConfirm').onclick=async()=>{
+    if(!manageState)return;const {kind,action,source}=manageState;let target=null;
+    if(action==='rename'){target=$('manageNameInput').value.trim();if(!target)return toast('Enter a new name');if(target.toLowerCase()===source.toLowerCase())return closeManage()}
+    if(['merge','remove'].includes(action))target=$('manageTargetSelect').value||null;
+    const records=kind==='category'?categoryRecords:distributorRecords, active=records.find(r=>r.name===source)?.active!==false;
+    const params={p_kind:kind,p_action:action,p_source:source,p_target:target,p_active:action==='toggle'?!active:null};
+    $('manageConfirm').disabled=true;const {error}=await db.rpc('manage_reference_value',params);$('manageConfirm').disabled=false;
+    if(error){toast(error.message);return}closeManage();await loadInventory();toast(`${kind==='category'?'Category':'Distributor'} updated`);
+  };
+  async function renderAdmin(){if(!isAdmin())return;const s=stats();$('dashProducts').textContent=s.products;$('dashUnits').textContent=s.units;$('dashRetail').textContent=money.format(s.retail);$('dashCost').textContent=money.format(s.cost);$('dashProfit').textContent=money.format(s.retail-s.cost);renderManager('category');renderManager('distributor');const low=inventory.filter(p=>p.lowStockThreshold>0&&totalUnits(p)<=p.lowStockThreshold);$('lowStockList').innerHTML=low.length?low.map(p=>`<div class="alert-item"><span>${esc(p.name)}</span><strong>${totalUnits(p)} / ${p.lowStockThreshold}</strong></div>`).join(''):'<div class="small-note">No low-stock products.</div>';renderReports();const {data}=await db.from('inventory_history').select('*').order('changed_at',{ascending:false}).limit(100);$('historyRows').innerHTML=(data||[]).map(h=>`<tr><td>${new Date(h.changed_at).toLocaleString()}</td><td>${esc(h.product_name||h.barcode)}</td><td>${esc(h.action)}</td><td>${h.quantity_change>0?'+':''}${h.quantity_change} ${esc(h.location||'')}</td><td>${esc(h.changed_by_email||'User')}</td></tr>`).join('')||'<tr><td colspan="5">No history yet.</td></tr>'}
   function renderReports(){const cat=$('reportCategory').value,dist=$('reportDistributor').value,filtered=inventory.filter(p=>(!cat||p.category===cat)&&(!dist||p.distributor===dist)),groups={};filtered.forEach(p=>{const k=p.category||'Uncategorized';(groups[k]??=[]).push(p)});$('reportRows').innerHTML=Object.entries(groups).sort().map(([k,v])=>{const s=stats(v);return`<tr><td>${esc(k)}</td><td>${s.products}</td><td>${s.units}</td><td>${money.format(s.retail)}</td><td>${money.format(s.cost)}</td></tr>`}).join('')||'<tr><td colspan="5">No report data.</td></tr>'}
   $('reportCategory').onchange=renderReports;$('reportDistributor').onchange=renderReports;
-  $('adminAddCategory').onclick=()=>addList('category',$('adminCategoryName').value);$('adminAddDistributor').onclick=()=>addList('distributor',$('adminDistributorName').value);
+  $('adminAddCategory').onclick=async()=>{await addList('category',$('adminCategoryName').value);$('adminCategoryName').value='';if(isAdmin())renderAdmin()};$('adminAddDistributor').onclick=async()=>{await addList('distributor',$('adminDistributorName').value);$('adminDistributorName').value='';if(isAdmin())renderAdmin()};
   $('catalogImportBtn').onclick=async()=>{if(!isAdmin())return;const file=$('catalogFile').files[0];if(!file){toast('Choose a Clover Excel file');return}$('catalogImportStatus').textContent='Reading workbook…';try{const buf=await file.arrayBuffer(),book=XLSX.read(buf),sheet=book.Sheets['Items']||book.Sheets[book.SheetNames[0]],rows=XLSX.utils.sheet_to_json(sheet,{defval:''}),valid=new Map();for(const r of rows){const barcode=normalizeBarcode(r['Product Code']),price=Number(r['Price']);if(!barcode||!Number.isFinite(price)||price<0.99||String(r['Hidden']).toLowerCase()==='yes')continue;valid.set(barcode,{barcode,product_name:String(r['Name']||'').trim(),price,cost:Number(r['Cost'])||0,category:String(r['Modifier Groups']||'').trim()||null,distributor:null,updated_at:new Date().toISOString()})}const all=[...valid.values()],chunk=400;for(let i=0;i<all.length;i+=chunk){$('catalogImportStatus').textContent=`Importing ${Math.min(i+chunk,all.length)} of ${all.length}…`;const {error}=await db.from('product_catalog').upsert(all.slice(i,i+chunk),{onConflict:'barcode'});if(error)throw error}const cats=[...new Set(all.map(x=>x.category).filter(Boolean))].map(name=>({name,created_by:currentUser.id}));if(cats.length)await db.from('categories').upsert(cats,{onConflict:'name'});$('catalogImportStatus').textContent=`Imported or updated ${all.length} catalog products. Live inventory was not overwritten.`;await loadLists()}catch(e){$('catalogImportStatus').textContent=`Import failed: ${e.message}`}};
   $('camBtn').onclick=()=>camRunning?stopCamera():startCamera();function startCamera(){$('reader').style.display='block';html5QrCode=new Html5Qrcode('reader');html5QrCode.start({facingMode:'environment'},{fps:10,qrbox:{width:240,height:140}},t=>{stopCamera();handleScan(t)},()=>{}).then(()=>{camRunning=true;$('camBtn').textContent='Turn off'}).catch(e=>{$('camMsg').style.display='block';$('camMsg').textContent='Camera unavailable. Use the scanner input instead.'})}function stopCamera(){if(html5QrCode&&camRunning)html5QrCode.stop().then(()=>{html5QrCode.clear();$('reader').style.display='none';$('camBtn').textContent='Turn on';camRunning=false})}
   function showAuthMessage(message,type='error'){$('authError').textContent=message;$('authError').className='auth-error'+(type==='success'?' success':type==='info'?' info':'')}
