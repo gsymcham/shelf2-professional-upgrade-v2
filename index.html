@@ -155,6 +155,10 @@
   .auth-tabs{display:flex; gap:8px; margin-bottom:16px;}
   .auth-tabs button{flex:1;}
   .auth-error{min-height:18px; color:var(--rust); font-size:12px; margin:8px 0;}
+  .auth-error.success{color:#287a4a;}
+  .auth-error.info{color:var(--ink-soft);}
+  .auth-confirm{display:none;}
+  .auth-confirm.visible{display:block;}
   .user-strip{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px;}
   .user-email{font-size:11px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .sync-state{font-size:10.5px; color:var(--green); font-family:'IBM Plex Mono',monospace;}
@@ -162,6 +166,41 @@
   .select-add-row select{flex:1;width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;font-size:15px;background:var(--paper);color:var(--ink);}
   .select-add-row .btn{white-space:nowrap;}
   .money-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+  /* Operations and admin */
+  .mode-switch{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+  .mode-btn{padding:11px 8px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-size:12px;font-weight:700;color:var(--ink-soft);}
+  .mode-btn.active{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+  .mode-help{font-size:12px;color:var(--ink-soft);margin:-4px 0 14px;line-height:1.45;}
+  .quick-adjust{display:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-top:14px;}
+  .quick-adjust.active{display:block;}
+  .quick-adjust h3{margin:0 0 4px;font-size:16px;}
+  .quick-adjust .product-line{font-size:12px;color:var(--ink-soft);margin-bottom:14px;}
+  .quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .dashboard-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+  .metric-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;}
+  .metric-card.wide{grid-column:1/-1;}
+  .metric-card .metric-value{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:700;margin-bottom:4px;}
+  .metric-card .metric-label{font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;}
+  .admin-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:14px;}
+  .admin-card h2{font-size:16px;margin:0 0 5px;}
+  .admin-card p{font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin:0 0 14px;}
+  .admin-card input[type=file]{width:100%;padding:12px;border:1px dashed var(--line);border-radius:9px;background:var(--paper);margin-bottom:10px;}
+  .admin-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+  .admin-row input,.admin-row select{flex:1;padding:11px;border:1px solid var(--line);border-radius:8px;background:var(--paper);}
+  .data-table{width:100%;border-collapse:collapse;font-size:11.5px;}
+  .data-table th,.data-table td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:top;}
+  .data-table th{font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;}
+  .scroll-table{overflow:auto;max-height:420px;}
+  .alert-item{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:12px;}
+  .alert-item:last-child{border-bottom:none;}
+  .role-chip{font-size:10px;font-family:'IBM Plex Mono',monospace;padding:3px 7px;border-radius:10px;background:#eee;color:var(--ink-soft);margin-left:6px;}
+  .admin-only{display:none!important;}
+  body.is-admin .admin-only{display:flex!important;}
+  body.is-admin section.admin-only{display:none!important;}
+  body.is-admin section.admin-only.active{display:block!important;}
+  .small-note{font-size:11px;color:var(--ink-soft);line-height:1.45;}
+  .report-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
 
 </style>
 </head>
@@ -183,7 +222,11 @@
         <label>Password</label>
         <input type="password" id="authPassword" autocomplete="current-password" placeholder="At least 6 characters">
       </div>
-      <div class="auth-error" id="authError"></div>
+      <div class="field auth-confirm" id="authConfirmWrap">
+        <label>Verify password</label>
+        <input type="password" id="authConfirmPassword" autocomplete="new-password" placeholder="Enter the password again">
+      </div>
+      <div class="auth-error" id="authError" role="status" aria-live="polite"></div>
       <button class="btn btn-amber btn-block" id="authSubmit">Sign in</button>
     </div>
   </div>
@@ -197,7 +240,7 @@
     </div>
     <div class="barcode-rule"></div>
     <div class="user-strip">
-      <span class="user-email" id="userEmail"></span>
+      <span class="user-email" id="userEmail"></span><span class="role-chip" id="roleChip" style="display:none"></span>
       <span class="sync-state" id="syncState">Offline</span>
       <button class="btn btn-line btn-sm" id="signOutBtn" style="display:none;">Sign out</button>
     </div>
@@ -206,6 +249,12 @@
   <main>
     <!-- SCAN VIEW -->
     <section class="view active" id="view-scan">
+      <div class="mode-switch">
+        <button class="mode-btn active" data-mode="edit">Edit</button>
+        <button class="mode-btn" data-mode="receive">Receive +</button>
+        <button class="mode-btn" data-mode="remove">Remove −</button>
+      </div>
+      <div class="mode-help" id="modeHelp">Scan to open and edit a product.</div>
       <div class="scan-card">
         <h2>Scan a barcode</h2>
         <p>Use a Bluetooth/USB barcode scanner — it types the code and hits enter automatically, just like a keyboard. Tap the box below first.</p>
@@ -221,6 +270,13 @@
       </div>
 
       <button class="btn btn-ink btn-block" id="manualAddBtn">+ Add product manually</button>
+      <div class="quick-adjust" id="quickAdjust">
+        <h3 id="quickProductName">Product</h3>
+        <div class="product-line mono" id="quickProductMeta"></div>
+        <div class="field"><label>Quantity to adjust</label><input type="number" id="quickQty" min="1" value="1" inputmode="numeric"></div>
+        <div class="field"><label>Location</label><select id="quickLocation"><option value="floor">Floor</option><option value="backroom">Back room — open</option><option value="cases">Unopened cases</option></select></div>
+        <div class="quick-grid"><button class="btn btn-line" id="quickCancel">Cancel</button><button class="btn btn-amber" id="quickApply">Apply</button></div>
+      </div>
     </section>
 
     <!-- INVENTORY VIEW -->
@@ -244,6 +300,53 @@
         </div>
       </div>
     </section>
+
+    <section class="view admin-only" id="view-admin">
+      <div class="dashboard-grid">
+        <div class="metric-card"><div class="metric-value" id="dashProducts">0</div><div class="metric-label">Products</div></div>
+        <div class="metric-card"><div class="metric-value" id="dashUnits">0</div><div class="metric-label">Units on hand</div></div>
+        <div class="metric-card"><div class="metric-value" id="dashRetail">$0.00</div><div class="metric-label">Retail value</div></div>
+        <div class="metric-card"><div class="metric-value" id="dashCost">$0.00</div><div class="metric-label">Cost value</div></div>
+        <div class="metric-card wide"><div class="metric-value" id="dashProfit">$0.00</div><div class="metric-label">Potential gross profit</div></div>
+      </div>
+
+      <div class="admin-card">
+        <h2>Import Clover catalog</h2>
+        <p>Upload the Clover Excel export. Only rows with a barcode and a price of at least $0.99 are imported. SKU and Clover quantity are ignored. Existing live inventory is never overwritten.</p>
+        <input type="file" id="catalogFile" accept=".xlsx,.xls">
+        <button class="btn btn-amber btn-block" id="catalogImportBtn">Import catalog</button>
+        <div class="small-note" id="catalogImportStatus"></div>
+      </div>
+
+      <div class="admin-card">
+        <h2>Category management</h2>
+        <div class="admin-row"><input id="adminCategoryName" placeholder="New category"><button class="btn btn-line btn-sm" id="adminAddCategory">Add</button></div>
+        <div class="small-note" id="adminCategoryList"></div>
+      </div>
+
+      <div class="admin-card">
+        <h2>Distributor management</h2>
+        <div class="admin-row"><input id="adminDistributorName" placeholder="New distributor"><button class="btn btn-line btn-sm" id="adminAddDistributor">Add</button></div>
+        <div class="small-note" id="adminDistributorList"></div>
+      </div>
+
+      <div class="admin-card">
+        <h2>Low-stock alerts</h2>
+        <p>Products at or below their low-stock threshold.</p>
+        <div id="lowStockList"></div>
+      </div>
+
+      <div class="admin-card">
+        <h2>Reports</h2>
+        <div class="report-controls"><select id="reportCategory"><option value="">All categories</option></select><select id="reportDistributor"><option value="">All distributors</option></select></div>
+        <div class="scroll-table"><table class="data-table"><thead><tr><th>Group</th><th>Products</th><th>Units</th><th>Retail</th><th>Cost</th></tr></thead><tbody id="reportRows"></tbody></table></div>
+      </div>
+
+      <div class="admin-card">
+        <h2>Recent inventory history</h2>
+        <div class="scroll-table"><table class="data-table"><thead><tr><th>When</th><th>Product</th><th>Action</th><th>Change</th><th>User</th></tr></thead><tbody id="historyRows"></tbody></table></div>
+      </div>
+    </section>
   </main>
 
   <nav>
@@ -251,6 +354,7 @@
       <button class="navbtn active" data-view="scan"><span class="ic">▤</span>Scan</button>
       <button class="navbtn" data-view="inventory"><span class="ic">▦</span>Inventory</button>
       <button class="navbtn" data-view="export"><span class="ic">⇩</span>Export</button>
+      <button class="navbtn admin-only" data-view="admin"><span class="ic">⚙</span>Admin</button>
     </div>
   </nav>
 
@@ -321,6 +425,10 @@
         <label>Bottles (units) per case</label>
         <input type="number" id="fieldUnitsPerCase" value="" inputmode="numeric" placeholder="e.g. 12">
       </div>
+      <div class="field">
+        <label>Low-stock threshold</label>
+        <input type="number" id="fieldLowStock" min="0" value="0" inputmode="numeric" placeholder="0 disables alert">
+      </div>
       <div class="total-line" id="totalLine">Total on hand: 0 units · 0 cases</div>
       <div class="field">
         <label>Status</label>
@@ -345,569 +453,70 @@
 (function(){
   const SUPABASE_URL = 'https://palrtkdvdtkqmvkjfuud.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhbHJ0a2R2ZHRrcW12a2pmdXVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwOTEyMjQsImV4cCI6MjEwMDY2NzIyNH0.5gYn9PvkMZFk922qULn4GmCQvgUnHeiES4mSEVe5q0w';
-  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-  });
-  let inventory = [];
-  let categories = [];
-  let distributors = [];
-  let currentUser = null;
-  let realtimeChannel = null;
-  let authMode = 'signin';
-  let currentEditId = null;
-  let html5QrCode = null;
-  let camRunning = false;
-
-  const $ = (id) => document.getElementById(id);
-  const views = { scan: $('view-scan'), inventory: $('view-inventory'), export: $('view-export') };
-  const navBtns = document.querySelectorAll('.navbtn');
-
-  function showToast(msg){
-    const t = $('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(()=> t.classList.remove('show'), 1600);
-  }
-
-  function switchView(name){
-    Object.keys(views).forEach(k => views[k].classList.toggle('active', k === name));
-    navBtns.forEach(b => b.classList.toggle('active', b.dataset.view === name));
-    if(name === 'inventory') renderList();
-    if(name === 'export') renderStats();
-    if(name === 'scan') setTimeout(()=> $('gunInput').focus(), 200);
-  }
-  navBtns.forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
-
-  function setSyncState(text, isError){
-    const el = $('syncState');
-    el.textContent = text;
-    el.style.color = isError ? 'var(--rust)' : 'var(--green)';
-  }
-
-  function fromDb(row){
-    return {
-      id: row.id, barcode: row.barcode, name: row.name,
-      price: row.price == null ? null : Number(row.price),
-      cost: row.cost == null ? null : Number(row.cost),
-      category: row.category || '', distributor: row.distributor || '',
-      floorQty: row.floor_qty || 0, backroomQty: row.backroom_qty || 0,
-      backroomCases: row.backroom_cases || 0, unitsPerCase: row.units_per_case || 0,
-      status: row.status || 'in_stock', updatedAt: new Date(row.updated_at).getTime(),
-      updatedBy: row.updated_by
-    };
-  }
-
-  function fillSelect(id, values, selected, emptyLabel){
-    const el = $(id);
-    const clean = [...new Set((values || []).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    el.innerHTML = `<option value="">${escapeHtml(emptyLabel)}</option>` + clean.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
-    if(selected && !clean.includes(selected)){
-      el.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(selected)}">${escapeHtml(selected)}</option>`);
-    }
-    el.value = selected || '';
-  }
-
-  async function loadLookupLists(){
-    if(!currentUser) return;
-    const [catRes, distRes, invRes, catalogRes] = await Promise.all([
-      supabaseClient.from('categories').select('name').order('name'),
-      supabaseClient.from('distributors').select('name').order('name'),
-      supabaseClient.from('inventory').select('category,distributor'),
-      supabaseClient.from('product_catalog').select('category,distributor')
-    ]);
-    const errors = [catRes.error, distRes.error, invRes.error, catalogRes.error].filter(Boolean);
-    if(errors.length) console.warn('Lookup-list load warning', errors);
-    categories = [...new Set([...(catRes.data||[]).map(x=>x.name), ...(invRes.data||[]).map(x=>x.category), ...(catalogRes.data||[]).map(x=>x.category)].filter(Boolean))];
-    distributors = [...new Set([...(distRes.data||[]).map(x=>x.name), ...(invRes.data||[]).map(x=>x.distributor), ...(catalogRes.data||[]).map(x=>x.distributor)].filter(Boolean))];
-    fillSelect('fieldCategory', categories, $('fieldCategory').value, 'Uncategorized');
-    fillSelect('fieldDistributor', distributors, $('fieldDistributor').value, 'Not assigned');
-  }
-
-  async function loadInventory(){
-    if(!currentUser) return;
-    setSyncState('Syncing…');
-    const { data, error } = await supabaseClient
-      .from('inventory')
-      .select('*')
-      .order('updated_at', { ascending: false });
-    if(error){
-      console.error(error);
-      setSyncState('Sync failed', true);
-      showToast(error.message || 'Could not load inventory');
-      return;
-    }
-    inventory = (data || []).map(fromDb);
-    await loadLookupLists();
-    updateHeaderCount();
-    renderList();
-    renderStats();
-    setSyncState('Cloud saved');
-  }
-
-  function subscribeToInventory(){
-    if(realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
-    realtimeChannel = supabaseClient.channel('shared-inventory')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => loadInventory())
-      .subscribe(status => {
-        if(status === 'SUBSCRIBED') setSyncState('Live');
-      });
-  }
-
-  async function saveNewProduct(product){
-    setSyncState('Saving…');
-    const { error } = await supabaseClient.from('inventory').insert({
-      barcode: product.barcode, name: product.name, price: product.price, cost: product.cost,
-      category: product.category || null, distributor: product.distributor || null, floor_qty: product.floorQty,
-      backroom_qty: product.backroomQty, backroom_cases: product.backroomCases,
-      units_per_case: product.unitsPerCase, status: product.status, updated_by: currentUser.id
-    });
-    if(error) throw error;
-  }
-
-  async function updateProduct(id, product){
-    setSyncState('Saving…');
-    const { error } = await supabaseClient.from('inventory').update({
-      barcode: product.barcode, name: product.name, price: product.price, cost: product.cost,
-      category: product.category || null, distributor: product.distributor || null, floor_qty: product.floorQty,
-      backroom_qty: product.backroomQty, backroom_cases: product.backroomCases,
-      units_per_case: product.unitsPerCase, status: product.status,
-      updated_by: currentUser.id, updated_at: new Date().toISOString()
-    }).eq('id', id);
-    if(error) throw error;
-  }
-
-  function updateHeaderCount(){
-    $('headerCount').textContent = inventory.length + (inventory.length === 1 ? ' item' : ' items');
-  }
-
-  function findByBarcode(code){
-    return inventory.find(p => p.barcode === code);
-  }
-
-  function caseUnits(p){
-    return (p.backroomCases || 0) * (p.unitsPerCase || 0);
-  }
-  function grandTotal(p){
-    return (p.floorQty || 0) + (p.backroomQty || 0) + caseUnits(p);
-  }
-
-  // ---- Panel (add/edit) ----
-  let lookupSeq = 0;
-
-  function openPanel(product, autoLookup){
-    currentEditId = product ? product.id : null;
-    $('panelTitle').textContent = product ? 'Edit product' : 'Add product';
-    $('panelBarcode').textContent = product ? product.barcode : 'New item';
-    $('fieldBarcode').value = product ? product.barcode : (pendingBarcode || '');
-    $('fieldName').value = product ? product.name : '';
-    $('fieldPrice').value = product && product.price != null ? product.price : '';
-    $('fieldCost').value = product && product.cost != null ? product.cost : '';
-    fillSelect('fieldCategory', categories, product ? product.category : '', 'Uncategorized');
-    fillSelect('fieldDistributor', distributors, product ? product.distributor : '', 'Not assigned');
-    $('fieldFloorQty').value = product ? (product.floorQty || 0) : 0;
-    $('fieldBackQty').value = product ? (product.backroomQty || 0) : 0;
-    $('fieldCases').value = product ? (product.backroomCases || 0) : 0;
-    $('fieldUnitsPerCase').value = product && product.unitsPerCase ? product.unitsPerCase : '';
-    updateTotalLine();
-    setStatusPills(product ? product.status : 'in_stock');
-    $('panelDelete').style.display = product ? 'block' : 'none';
-    $('panelOverlay').classList.add('active');
-    const statusEl = $('lookupStatus');
-    statusEl.textContent = '';
-    statusEl.classList.remove('found');
-    setTimeout(()=> $('fieldName').focus(), 150);
-
-    if(autoLookup && !product){
-      const barcode = $('fieldBarcode').value.trim();
-      if(barcode) runProductLookup(barcode);
-    }
-  }
-
-  async function runProductLookup(barcode){
-    const seq = ++lookupSeq;
-    const statusEl = $('lookupStatus');
-    statusEl.textContent = 'Looking up product…';
-    const result = await lookupProduct(barcode);
-    // Bail if the panel moved on to something else while we were waiting
-    if(seq !== lookupSeq || currentEditId || $('fieldBarcode').value.trim() !== barcode) return;
-    if(result && result.name){
-      if(!$('fieldName').value.trim()) $('fieldName').value = result.name;
-      if(result.price != null) $('fieldPrice').value = Number(result.price).toFixed(2);
-      if(result.cost != null) $('fieldCost').value = Number(result.cost).toFixed(2);
-      fillSelect('fieldCategory', categories, result.category || '', 'Uncategorized');
-      fillSelect('fieldDistributor', distributors, result.distributor || '', 'Not assigned');
-      statusEl.textContent = `Found: ${result.source}`;
-      statusEl.classList.add('found');
-    } else {
-      statusEl.textContent = 'No match found — enter details manually';
-      statusEl.classList.remove('found');
-    }
-  }
-
-  async function lookupProduct(barcode){
-    // First use the imported business catalog. Existing inventory is checked before this function runs.
-    try{
-      const { data, error } = await supabaseClient
-        .from('product_catalog')
-        .select('barcode,product_name,price,cost,category,distributor')
-        .eq('barcode', barcode)
-        .maybeSingle();
-      if(error) throw error;
-      if(data){
-        return {
-          name: data.product_name || '', price: data.price, cost: data.cost,
-          category: data.category || '', distributor: data.distributor || '',
-          source: 'imported catalog'
-        };
-      }
-    }catch(e){ console.warn('Catalog lookup failed', e); }
-    return null;
-  }
-
-  function updateTotalLine(){
-    const floor = parseInt($('fieldFloorQty').value || '0', 10);
-    const back = parseInt($('fieldBackQty').value || '0', 10);
-    const cases = parseInt($('fieldCases').value || '0', 10);
-    const perCase = parseInt($('fieldUnitsPerCase').value || '0', 10);
-    if(cases > 0 && perCase > 0){
-      const caseUnits = cases * perCase;
-      const grand = floor + back + caseUnits;
-      $('totalLine').textContent = `Total on hand: ${grand} units  (${floor} floor + ${back} back room + ${caseUnits} in ${cases} case${cases === 1 ? '' : 's'} @ ${perCase})`;
-    } else {
-      $('totalLine').textContent = `Total on hand: ${floor + back} unit${floor + back === 1 ? '' : 's'} · ${cases} unopened case${cases === 1 ? '' : 's'}${cases > 0 ? ' (add units/case above to include in total)' : ''}`;
-    }
-  }
-  function closePanel(){
-    $('panelOverlay').classList.remove('active');
-    currentEditId = null;
-    pendingBarcode = null;
-  }
-  function setStatusPills(status){
-    $('statusInBtn').classList.toggle('on', status === 'in_stock');
-    $('statusOutBtn').classList.toggle('on', status === 'out_of_stock');
-  }
-  $('statusInBtn').addEventListener('click', ()=> setStatusPills('in_stock'));
-  $('statusOutBtn').addEventListener('click', ()=> setStatusPills('out_of_stock'));
-  function stepper(minusId, plusId, fieldId){
-    $(minusId).addEventListener('click', ()=>{
-      const el = $(fieldId); el.value = Math.max(0, (parseInt(el.value||0,10) - 1)); updateTotalLine();
-    });
-    $(plusId).addEventListener('click', ()=>{
-      const el = $(fieldId); el.value = (parseInt(el.value||0,10) + 1); updateTotalLine();
-    });
-    $(fieldId).addEventListener('input', updateTotalLine);
-  }
-  stepper('floorMinus', 'floorPlus', 'fieldFloorQty');
-  stepper('backMinus', 'backPlus', 'fieldBackQty');
-  stepper('casesMinus', 'casesPlus', 'fieldCases');
-  $('fieldUnitsPerCase').addEventListener('input', updateTotalLine);
-  $('panelCancel').addEventListener('click', closePanel);
-  $('panelOverlay').addEventListener('click', (e)=>{ if(e.target.id === 'panelOverlay') closePanel(); });
-  $('fieldBarcode').addEventListener('blur', ()=>{
-    const barcode = $('fieldBarcode').value.trim();
-    if(!currentEditId && barcode && !$('fieldName').value.trim()) runProductLookup(barcode);
-  });
-
-  async function addLookupValue(kind){
-    const label = kind === 'category' ? 'category' : 'distributor';
-    const value = prompt(`Enter new ${label} name:`);
-    if(value == null) return;
-    const name = value.trim();
-    if(!name){ showToast(`Enter a ${label} name`); return; }
-    const table = kind === 'category' ? 'categories' : 'distributors';
-    const { error } = await supabaseClient.from(table).upsert({ name }, { onConflict: 'name' });
-    if(error){ showToast(error.message || `Could not add ${label}`); return; }
-    await loadLookupLists();
-    const field = kind === 'category' ? 'fieldCategory' : 'fieldDistributor';
-    $(field).value = name;
-    showToast(`${label.charAt(0).toUpperCase()+label.slice(1)} added`);
-  }
-  $('addCategoryBtn').addEventListener('click', ()=> addLookupValue('category'));
-  $('addDistributorBtn').addEventListener('click', ()=> addLookupValue('distributor'));
-
-  $('panelSave').addEventListener('click', async ()=>{
-    const barcode = $('fieldBarcode').value.trim();
-    const name = $('fieldName').value.trim();
-    const priceRaw = $('fieldPrice').value.trim();
-    const costRaw = $('fieldCost').value.trim();
-    const price = priceRaw === '' ? null : Math.max(0, Number(priceRaw));
-    const cost = costRaw === '' ? null : Math.max(0, Number(costRaw));
-    const category = $('fieldCategory').value.trim();
-    const distributor = $('fieldDistributor').value.trim();
-    const floorQty = Math.max(0, parseInt($('fieldFloorQty').value || '0', 10));
-    const backroomQty = Math.max(0, parseInt($('fieldBackQty').value || '0', 10));
-    const backroomCases = Math.max(0, parseInt($('fieldCases').value || '0', 10));
-    const unitsPerCase = Math.max(0, parseInt($('fieldUnitsPerCase').value || '0', 10));
-    const status = $('statusOutBtn').classList.contains('on') ? 'out_of_stock' : 'in_stock';
-
-    if(!name){ showToast('Give it a product name'); return; }
-    if(!barcode){ showToast('Barcode is required'); return; }
-
-    const dupe = findByBarcode(barcode);
-    if(dupe && dupe.id !== currentEditId){ showToast('That barcode is already in use'); return; }
-
-    try{
-      const product = { barcode, name, price, cost, category, distributor, floorQty, backroomQty, backroomCases, unitsPerCase, status };
-      if(currentEditId){
-        await updateProduct(currentEditId, product);
-        showToast('Updated in cloud');
-      } else {
-        await saveNewProduct(product);
-        showToast('Added to cloud');
-      }
-      closePanel();
-      await loadInventory();
-    }catch(error){
-      console.error(error);
-      setSyncState('Save failed', true);
-      showToast(error.code === '23505' ? 'That barcode is already in use' : (error.message || 'Could not save'));
-    }
-  });
-
-  $('panelDelete').addEventListener('click', async ()=>{
-    if(!currentEditId) return;
-    try{
-      setSyncState('Deleting…');
-      const { error } = await supabaseClient.from('inventory').delete().eq('id', currentEditId);
-      if(error) throw error;
-      closePanel();
-      await loadInventory();
-      showToast('Deleted from cloud');
-    }catch(error){
-      console.error(error);
-      setSyncState('Delete failed', true);
-      showToast(error.message || 'Could not delete');
-    }
-  });
-
-  $('manualAddBtn').addEventListener('click', ()=> openPanel(null));
-
-  // ---- Scan (hardware / keyboard-wedge scanner) ----
-  let pendingBarcode = null;
-  const gunInput = $('gunInput');
-  gunInput.addEventListener('keydown', (e)=>{
-    if(e.key === 'Enter'){
-      e.preventDefault();
-      const code = gunInput.value.trim();
-      gunInput.value = '';
-      if(!code) return;
-      handleScannedCode(code);
-    }
-  });
-
-  async function handleScannedCode(code){
-    const existing = findByBarcode(code);
-    if(existing){ openPanel(existing); return; }
-    setSyncState('Checking…');
-    const { data, error } = await supabaseClient.from('inventory').select('*').eq('barcode', code).maybeSingle();
-    if(!error && data){
-      const p = fromDb(data);
-      if(!inventory.some(x=>x.id===p.id)) inventory.push(p);
-      openPanel(p);
-      setSyncState('Cloud saved');
-      return;
-    }
-    pendingBarcode = code;
-    openPanel(null, true);
-  }
-
-  // ---- Camera scanning (optional, phone camera) ----
-  $('camBtn').addEventListener('click', async ()=>{
-    if(camRunning){ stopCamera(); return; }
-    startCamera();
-  });
-
-  function startCamera(){
-    const readerEl = $('reader');
-    const msgEl = $('camMsg');
-    msgEl.style.display = 'none';
-    readerEl.style.display = 'block';
-    html5QrCode = new Html5Qrcode('reader');
-    html5QrCode.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 240, height: 140 } },
-      (decodedText) => {
-        stopCamera();
-        handleScannedCode(decodedText);
-      },
-      () => {}
-    ).then(()=>{
-      camRunning = true;
-      $('camBtn').textContent = 'Turn off';
-    }).catch((err)=>{
-      readerEl.style.display = 'none';
-      msgEl.style.display = 'block';
-      msgEl.textContent = 'Camera unavailable here — this can happen inside the preview window. Use a hardware scanner or type the code above instead.';
-    });
-  }
-  function stopCamera(){
-    if(html5QrCode && camRunning){
-      html5QrCode.stop().then(()=>{
-        html5QrCode.clear();
-        $('reader').style.display = 'none';
-        $('camBtn').textContent = 'Turn on';
-        camRunning = false;
-      }).catch(()=>{
-        camRunning = false;
-        $('camBtn').textContent = 'Turn on';
-      });
-    }
-  }
-
-  // ---- Inventory list ----
-  $('searchInput').addEventListener('input', renderList);
-
-  function renderList(){
-    const q = $('searchInput').value.trim().toLowerCase();
-    const wrap = $('listWrap');
-    let items = inventory.slice().sort((a,b)=> b.updatedAt - a.updatedAt);
-    if(q){
-      items = items.filter(p => [p.name,p.barcode,p.category,p.distributor].some(v => String(v||'').toLowerCase().includes(q)));
-    }
-    if(items.length === 0){
-      wrap.innerHTML = `<div class="empty"><div class="icon">📦</div><p>${inventory.length === 0 ? 'No products yet.<br>Scan or add your first item.' : 'No matches for that search.'}</p></div>`;
-      return;
-    }
-    wrap.innerHTML = items.map(p => {
-      const floor = p.floorQty || 0;
-      const back = p.backroomQty || 0;
-      const cases = p.backroomCases || 0;
-      const cu = caseUnits(p);
-      const total = floor + back + cu;
-      const locText = cases > 0
-        ? (p.unitsPerCase ? `F ${floor} · B ${back} · ${cu} in case` : `F ${floor} · B ${back}`)
-        : `F ${floor} · B ${back}`;
-      return `
-      <div class="row" data-id="${p.id}">
-        <div class="info">
-          <div class="name">${escapeHtml(p.name)}</div>
-          <div class="meta">${escapeHtml(p.barcode)}${p.category ? ` · ${escapeHtml(p.category)}` : ''}${p.distributor ? ` · ${escapeHtml(p.distributor)}` : ''}</div>
-          ${cases > 0 ? `<span class="cases-flag">${cases} unopened case${cases === 1 ? '' : 's'}${p.unitsPerCase ? ` × ${p.unitsPerCase}` : ' — set units/case'}</span>` : ''}
-        </div>
-        <div class="right">
-          <div>
-            <div class="qty">${total}</div>
-            <div class="loc">${locText}</div>
-          </div>
-          <span class="badge ${p.status === 'out_of_stock' ? 'out' : 'in'}">${p.status === 'out_of_stock' ? 'Out' : 'In stock'}</span>
-        </div>
-      </div>
-    `;
-    }).join('');
-    wrap.querySelectorAll('.row').forEach(row => {
-      row.addEventListener('click', ()=>{
-        const p = inventory.find(x => x.id === row.dataset.id);
-        if(p) openPanel(p);
-      });
-    });
-  }
-
-  function escapeHtml(str){
-    return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-
-  // ---- Export ----
-  function renderStats(){
-    const total = inventory.length;
-    const units = inventory.reduce((s,p)=> s + grandTotal(p), 0);
-    const cases = inventory.reduce((s,p)=> s + (p.backroomCases || 0), 0);
-    const out = inventory.filter(p => p.status === 'out_of_stock').length;
-    $('statTotal').textContent = total;
-    $('statUnits').textContent = units;
-    $('statCases').textContent = cases;
-    $('statOut').textContent = out;
-  }
-
-  $('exportBtn').addEventListener('click', ()=>{
-    if(inventory.length === 0){ showToast('Nothing to export yet'); return; }
-    const rows = inventory
-      .slice()
-      .sort((a,b)=> a.name.localeCompare(b.name))
-      .map(p => ({
-        'Barcode': p.barcode,
-        'Product Name': p.name,
-        'Price': p.price == null ? '' : p.price,
-        'Cost': p.cost == null ? '' : p.cost,
-        'Category': p.category || '',
-        'Distributor': p.distributor || '',
-        'On Floor': p.floorQty || 0,
-        'Back Room (open)': p.backroomQty || 0,
-        'Unopened Cases': p.backroomCases || 0,
-        'Units per Case': p.unitsPerCase || '',
-        'Units in Cases': caseUnits(p),
-        'Total Inventory': grandTotal(p),
-        'Status': p.status === 'out_of_stock' ? 'Out of stock' : 'In stock',
-        'Last Updated': new Date(p.updatedAt).toLocaleString()
-      }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{wch:16},{wch:32},{wch:10},{wch:10},{wch:18},{wch:20},{wch:9},{wch:14},{wch:12},{wch:11},{wch:12},{wch:13},{wch:14},{wch:20}];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
-    const dateStr = new Date().toISOString().slice(0,10);
-    XLSX.writeFile(wb, `shelf-inventory-${dateStr}.xlsx`);
-    showToast('Exported');
-  });
-
-  // ---- Authentication and initialization ----
-  function setAuthMode(mode){
-    authMode = mode;
-    const signIn = mode === 'signin';
-    $('authSignInTab').className = 'btn ' + (signIn ? 'btn-ink' : 'btn-line');
-    $('authSignUpTab').className = 'btn ' + (!signIn ? 'btn-ink' : 'btn-line');
-    $('authSubmit').textContent = signIn ? 'Sign in' : 'Create account';
-    $('authPassword').autocomplete = signIn ? 'current-password' : 'new-password';
-    $('authError').textContent = '';
-  }
-
-  async function applySession(session){
-    currentUser = session ? session.user : null;
-    $('authOverlay').classList.toggle('hidden', !!currentUser);
-    $('signOutBtn').style.display = currentUser ? 'block' : 'none';
-    $('userEmail').textContent = currentUser ? currentUser.email : '';
-    if(currentUser){
-      subscribeToInventory();
-      await loadInventory();
-      setTimeout(()=> gunInput.focus(), 300);
-    }else{
-      inventory = [];
-      updateHeaderCount();
-      renderList();
-      setSyncState('Offline');
-      if(realtimeChannel){ supabaseClient.removeChannel(realtimeChannel); realtimeChannel = null; }
-    }
-  }
-
-  $('authSignInTab').addEventListener('click', ()=> setAuthMode('signin'));
-  $('authSignUpTab').addEventListener('click', ()=> setAuthMode('signup'));
-  $('authSubmit').addEventListener('click', async ()=>{
-    const email = $('authEmail').value.trim();
-    const password = $('authPassword').value;
-    $('authError').textContent = '';
-    if(!email || password.length < 6){ $('authError').textContent = 'Enter a valid email and a password of at least 6 characters.'; return; }
-    $('authSubmit').disabled = true;
-    try{
-      if(authMode === 'signin'){
-        const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        if(error) throw error;
-      }else{
-        const { data, error } = await supabaseClient.auth.signUp({ email, password });
-        if(error) throw error;
-        if(!data.session){
-          $('authError').style.color = 'var(--green)';
-          $('authError').textContent = 'Account created. Check your email to confirm it, then sign in.';
-          setAuthMode('signin');
-        }
-      }
-    }catch(error){
-      $('authError').style.color = 'var(--rust)';
-      $('authError').textContent = error.message || 'Authentication failed.';
-    }finally{ $('authSubmit').disabled = false; }
-  });
-  $('authPassword').addEventListener('keydown', e => { if(e.key === 'Enter') $('authSubmit').click(); });
-  $('signOutBtn').addEventListener('click', async ()=>{ await supabaseClient.auth.signOut(); });
-
-  supabaseClient.auth.onAuthStateChange((_event, session)=> applySession(session));
-  supabaseClient.auth.getSession().then(({data})=> applySession(data.session));
+  const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  const $=id=>document.getElementById(id);
+  let inventory=[],categories=[],distributors=[],currentUser=null,userRole='staff',channel=null,currentEditId=null,pendingBarcode=null,scanMode='edit',quickProduct=null,authMode='signin',html5QrCode=null,camRunning=false;
+  const money=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
+  const views={scan:$('view-scan'),inventory:$('view-inventory'),export:$('view-export'),admin:$('view-admin')};
+  const navBtns=[...document.querySelectorAll('.navbtn')];
+  const isAdmin=()=>userRole==='admin';
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
+  function sync(text,error=false){$('syncState').textContent=text;$('syncState').style.color=error?'var(--rust)':'var(--green)'}
+  function normalizeBarcode(v){return String(v??'').trim().replace(/\.0$/,'')}
+  function sameBarcode(a,b){const x=normalizeBarcode(a),y=normalizeBarcode(b);return x===y||x.replace(/^0+/,'')===y.replace(/^0+/,'')}
+  function fromDb(r){return{id:r.id,barcode:r.barcode,name:r.name,price:r.price==null?null:Number(r.price),cost:r.cost==null?null:Number(r.cost),category:r.category||'',distributor:r.distributor||'',floorQty:r.floor_qty||0,backroomQty:r.backroom_qty||0,backroomCases:r.backroom_cases||0,unitsPerCase:r.units_per_case||0,lowStockThreshold:r.low_stock_threshold||0,status:r.status||'in_stock',updatedAt:new Date(r.updated_at).getTime(),updatedBy:r.updated_by}}
+  const caseUnits=p=>(p.backroomCases||0)*(p.unitsPerCase||0);
+  const totalUnits=p=>(p.floorQty||0)+(p.backroomQty||0)+caseUnits(p);
+  function switchView(name){if(name==='admin'&&!isAdmin())name='scan';Object.entries(views).forEach(([k,v])=>v&&v.classList.toggle('active',k===name));navBtns.forEach(b=>b.classList.toggle('active',b.dataset.view===name));if(name==='inventory')renderList();if(name==='export')renderStats();if(name==='admin')renderAdmin();if(name==='scan')setTimeout(()=>$('gunInput').focus(),100)}
+  navBtns.forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
+  function applyRoleUI(){document.body.classList.toggle('is-admin',isAdmin());$('roleChip').style.display='inline-block';$('roleChip').textContent=isAdmin()?'ADMIN':'STAFF';$('addCategoryBtn').style.display=isAdmin()?'block':'none';$('addDistributorBtn').style.display=isAdmin()?'block':'none'}
+  async function loadRole(){userRole='staff';if(!currentUser)return;const {data,error}=await db.from('profiles').select('role').eq('id',currentUser.id).maybeSingle();if(!error&&data?.role)userRole=data.role;applyRoleUI()}
+  function fillSelect(id,vals,selected,label){const el=$(id);if(!el)return;const clean=[...new Set((vals||[]).filter(Boolean))].sort((a,b)=>a.localeCompare(b));el.innerHTML=`<option value="">${esc(label)}</option>`+clean.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');if(selected&&!clean.includes(selected))el.insertAdjacentHTML('beforeend',`<option value="${esc(selected)}">${esc(selected)}</option>`);el.value=selected||''}
+  async function loadLists(){const [a,b,c,d]=await Promise.all([db.from('categories').select('name').order('name'),db.from('distributors').select('name').order('name'),db.from('inventory').select('category,distributor'),db.from('product_catalog').select('category,distributor')]);categories=[...new Set([...(a.data||[]).map(x=>x.name),...(c.data||[]).map(x=>x.category),...(d.data||[]).map(x=>x.category)].filter(Boolean))];distributors=[...new Set([...(b.data||[]).map(x=>x.name),...(c.data||[]).map(x=>x.distributor),...(d.data||[]).map(x=>x.distributor)].filter(Boolean))];fillSelect('fieldCategory',categories,$('fieldCategory').value,'Uncategorized');fillSelect('fieldDistributor',distributors,$('fieldDistributor').value,'Not assigned');fillSelect('reportCategory',categories,$('reportCategory')?.value,'All categories');fillSelect('reportDistributor',distributors,$('reportDistributor')?.value,'All distributors')}
+  async function loadInventory(){if(!currentUser)return;sync('Syncing…');const {data,error}=await db.from('inventory').select('*').order('updated_at',{ascending:false});if(error){sync('Sync failed',true);toast(error.message);return}inventory=(data||[]).map(fromDb);await loadLists();$('headerCount').textContent=`${inventory.length} item${inventory.length===1?'':'s'}`;renderList();renderStats();if(isAdmin())await renderAdmin();sync('Live')}
+  function subscribe(){if(channel)db.removeChannel(channel);channel=db.channel('inventory-live').on('postgres_changes',{event:'*',schema:'public',table:'inventory'},()=>loadInventory()).subscribe()}
+  function findProduct(code){return inventory.find(p=>sameBarcode(p.barcode,code))}
+  async function lookupCatalog(code){const exact=normalizeBarcode(code);let {data,error}=await db.from('product_catalog').select('barcode,product_name,price,cost,category,distributor').eq('barcode',exact).maybeSingle();if(error)throw error;if(!data){const stripped=exact.replace(/^0+/,'');if(stripped!==exact){({data,error}=await db.from('product_catalog').select('barcode,product_name,price,cost,category,distributor').eq('barcode',stripped).maybeSingle());if(error)throw error}}return data}
+  function setMode(mode){scanMode=mode;document.querySelectorAll('.mode-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));$('modeHelp').textContent=mode==='edit'?'Scan to open and edit a product.':mode==='receive'?'Scan an existing product and add received units.':'Scan an existing product and remove sold, damaged, or transferred units.';$('quickAdjust').classList.remove('active');quickProduct=null}
+  document.querySelectorAll('.mode-btn').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+  async function handleScan(raw){const code=normalizeBarcode(raw);if(!code)return;let p=findProduct(code);if(!p){const {data,error}=await db.from('inventory').select('*').eq('barcode',code).maybeSingle();if(!error&&data)p=fromDb(data)}if(scanMode!=='edit'){if(!p){toast('Product must be added before quantity adjustment');pendingBarcode=code;openPanel(null,true);return}quickProduct=p;$('quickProductName').textContent=p.name;$('quickProductMeta').textContent=`${p.barcode} · ${totalUnits(p)} units on hand`;$('quickQty').value=1;$('quickAdjust').classList.add('active');return}if(p){openPanel(p);return}pendingBarcode=code;openPanel(null,true)}
+  $('gunInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const c=e.target.value;e.target.value='';handleScan(c)}});
+  $('quickCancel').addEventListener('click',()=>{$('quickAdjust').classList.remove('active');quickProduct=null});
+  $('quickApply').addEventListener('click',async()=>{if(!quickProduct)return;const qty=Math.max(1,parseInt($('quickQty').value||1)),loc=$('quickLocation').value,sign=scanMode==='receive'?1:-1;let updates={};if(loc==='floor')updates.floor_qty=Math.max(0,quickProduct.floorQty+sign*qty);if(loc==='backroom')updates.backroom_qty=Math.max(0,quickProduct.backroomQty+sign*qty);if(loc==='cases')updates.backroom_cases=Math.max(0,quickProduct.backroomCases+sign*qty);updates.status=((updates.floor_qty??quickProduct.floorQty)+(updates.backroom_qty??quickProduct.backroomQty)+((updates.backroom_cases??quickProduct.backroomCases)*quickProduct.unitsPerCase)>0)?'in_stock':'out_of_stock';updates.updated_by=currentUser.id;updates.updated_at=new Date().toISOString();const {error}=await db.from('inventory').update(updates).eq('id',quickProduct.id);if(error){toast(error.message);return}await db.from('inventory_history').insert({inventory_id:quickProduct.id,barcode:quickProduct.barcode,product_name:quickProduct.name,action:scanMode,location:loc,quantity_change:sign*qty,changed_by:currentUser.id});toast(`${scanMode==='receive'?'Added':'Removed'} ${qty}`);$('quickAdjust').classList.remove('active');quickProduct=null;await loadInventory()});
+  let lookupSeq=0;
+  function openPanel(p,auto=false){currentEditId=p?.id||null;$('panelTitle').textContent=p?'Edit product':'Add product';$('panelBarcode').textContent=p?.barcode||'New item';$('fieldBarcode').value=p?.barcode||pendingBarcode||'';$('fieldName').value=p?.name||'';$('fieldPrice').value=p?.price??'';$('fieldCost').value=p?.cost??'';fillSelect('fieldCategory',categories,p?.category||'','Uncategorized');fillSelect('fieldDistributor',distributors,p?.distributor||'','Not assigned');$('fieldFloorQty').value=p?.floorQty||0;$('fieldBackQty').value=p?.backroomQty||0;$('fieldCases').value=p?.backroomCases||0;$('fieldUnitsPerCase').value=p?.unitsPerCase||'';$('fieldLowStock').value=p?.lowStockThreshold||0;setStatus(p?.status||'in_stock');$('panelDelete').style.display=p&&isAdmin()?'block':'none';$('panelOverlay').classList.add('active');$('lookupStatus').textContent='';updateTotal();if(auto)runLookup($('fieldBarcode').value)}
+  async function runLookup(code){const seq=++lookupSeq;$('lookupStatus').textContent='Looking up imported catalog…';try{const d=await lookupCatalog(code);if(seq!==lookupSeq||currentEditId)return;if(d){$('fieldName').value=d.product_name||'';$('fieldPrice').value=d.price??'';$('fieldCost').value=d.cost??'';fillSelect('fieldCategory',categories,d.category||'','Uncategorized');fillSelect('fieldDistributor',distributors,d.distributor||'','Not assigned');$('lookupStatus').textContent='Found in imported catalog';$('lookupStatus').classList.add('found')}else $('lookupStatus').textContent='No catalog match — enter details manually'}catch(e){$('lookupStatus').textContent=`Catalog error: ${e.message}`}}
+  function setStatus(s){$('statusInBtn').classList.toggle('on',s==='in_stock');$('statusOutBtn').classList.toggle('on',s==='out_of_stock')}
+  $('statusInBtn').onclick=()=>setStatus('in_stock');$('statusOutBtn').onclick=()=>setStatus('out_of_stock');
+  function updateTotal(){const f=+$('fieldFloorQty').value||0,b=+$('fieldBackQty').value||0,c=+$('fieldCases').value||0,u=+$('fieldUnitsPerCase').value||0;$('totalLine').textContent=`Total on hand: ${f+b+c*u} units · ${c} unopened case${c===1?'':'s'}`}
+  [['floorMinus','floorPlus','fieldFloorQty'],['backMinus','backPlus','fieldBackQty'],['casesMinus','casesPlus','fieldCases']].forEach(([m,p,f])=>{$(m).onclick=()=>{$(f).value=Math.max(0,(+$(f).value||0)-1);updateTotal()};$(p).onclick=()=>{$(f).value=(+$(f).value||0)+1;updateTotal()};$(f).oninput=updateTotal});$('fieldUnitsPerCase').oninput=updateTotal;
+  function closePanel(){$('panelOverlay').classList.remove('active');currentEditId=null;pendingBarcode=null}
+  $('panelCancel').onclick=closePanel;$('panelOverlay').onclick=e=>{if(e.target.id==='panelOverlay')closePanel()};$('manualAddBtn').onclick=()=>openPanel(null);
+  async function addList(kind,nameOverride){if(!isAdmin()){toast('Admin access required');return}const label=kind==='category'?'category':'distributor',name=(nameOverride??prompt(`Enter new ${label}:`)??'').trim();if(!name)return;const table=kind==='category'?'categories':'distributors';const {error}=await db.from(table).upsert({name,created_by:currentUser.id},{onConflict:'name'});if(error){toast(error.message);return}await loadLists();toast(`${label} added`)}
+  $('addCategoryBtn').onclick=()=>addList('category');$('addDistributorBtn').onclick=()=>addList('distributor');
+  $('panelSave').onclick=async()=>{const product={barcode:normalizeBarcode($('fieldBarcode').value),name:$('fieldName').value.trim(),price:$('fieldPrice').value===''?null:Math.max(0,+$('fieldPrice').value),cost:$('fieldCost').value===''?null:Math.max(0,+$('fieldCost').value),category:$('fieldCategory').value||null,distributor:$('fieldDistributor').value||null,floor_qty:Math.max(0,+$('fieldFloorQty').value||0),backroom_qty:Math.max(0,+$('fieldBackQty').value||0),backroom_cases:Math.max(0,+$('fieldCases').value||0),units_per_case:Math.max(0,+$('fieldUnitsPerCase').value||0),low_stock_threshold:Math.max(0,+$('fieldLowStock').value||0),status:$('statusOutBtn').classList.contains('on')?'out_of_stock':'in_stock',updated_by:currentUser.id,updated_at:new Date().toISOString()};if(!product.barcode||!product.name){toast('Barcode and product name are required');return}let error;if(currentEditId){({error}=await db.from('inventory').update(product).eq('id',currentEditId));if(!error)await db.from('inventory_history').insert({inventory_id:currentEditId,barcode:product.barcode,product_name:product.name,action:'edit',location:'all',quantity_change:0,changed_by:currentUser.id})}else{const r=await db.from('inventory').insert(product).select('id').single();error=r.error;if(!error)await db.from('inventory_history').insert({inventory_id:r.data.id,barcode:product.barcode,product_name:product.name,action:'create',location:'all',quantity_change:product.floor_qty+product.backroom_qty+product.backroom_cases*product.units_per_case,changed_by:currentUser.id})}if(error){toast(error.message);return}closePanel();toast('Saved');await loadInventory()};
+  $('panelDelete').onclick=async()=>{if(!isAdmin()||!currentEditId)return;const p=inventory.find(x=>x.id===currentEditId);const {error}=await db.from('inventory').delete().eq('id',currentEditId);if(error){toast(error.message);return}await db.from('inventory_history').insert({inventory_id:null,barcode:p.barcode,product_name:p.name,action:'delete',location:'all',quantity_change:-totalUnits(p),changed_by:currentUser.id});closePanel();await loadInventory()};
+  $('searchInput').oninput=renderList;
+  function renderList(){const q=$('searchInput').value.trim().toLowerCase();let rows=inventory.filter(p=>!q||[p.name,p.barcode,p.category,p.distributor].some(v=>String(v||'').toLowerCase().includes(q)));$('listWrap').innerHTML=rows.length?rows.map(p=>`<div class="row" data-id="${p.id}"><div class="info"><div class="name">${esc(p.name)}</div><div class="meta">${esc(p.barcode)}${p.category?' · '+esc(p.category):''}${p.distributor?' · '+esc(p.distributor):''}</div></div><div class="right"><div><div class="qty">${totalUnits(p)}</div><div class="loc">F ${p.floorQty} · B ${p.backroomQty}</div></div><span class="badge ${p.status==='out_of_stock'?'out':'in'}">${p.status==='out_of_stock'?'Out':'In stock'}</span></div></div>`).join(''):`<div class="empty"><div class="icon">📦</div><p>No matching products.</p></div>`;document.querySelectorAll('#listWrap .row').forEach(r=>r.onclick=()=>openPanel(inventory.find(p=>p.id===r.dataset.id)))}
+  function stats(filtered=inventory){return{products:filtered.length,units:filtered.reduce((s,p)=>s+totalUnits(p),0),cases:filtered.reduce((s,p)=>s+p.backroomCases,0),out:filtered.filter(p=>totalUnits(p)<=0).length,retail:filtered.reduce((s,p)=>s+totalUnits(p)*(p.price||0),0),cost:filtered.reduce((s,p)=>s+totalUnits(p)*(p.cost||0),0)}}
+  function renderStats(){const s=stats();$('statTotal').textContent=s.products;$('statUnits').textContent=s.units;$('statCases').textContent=s.cases;$('statOut').textContent=s.out}
+  $('exportBtn').onclick=()=>{if(!inventory.length)return toast('Nothing to export');const rows=inventory.map(p=>({'Barcode':p.barcode,'Product Name':p.name,'Price':p.price??'','Cost':p.cost??'','Category':p.category,'Distributor':p.distributor,'On Floor':p.floorQty,'Back Room':p.backroomQty,'Cases':p.backroomCases,'Units per Case':p.unitsPerCase,'Total Units':totalUnits(p),'Retail Value':totalUnits(p)*(p.price||0),'Cost Value':totalUnits(p)*(p.cost||0),'Low Stock Threshold':p.lowStockThreshold,'Status':p.status}));const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Inventory');XLSX.writeFile(wb,`shelf-inventory-${new Date().toISOString().slice(0,10)}.xlsx`)};
+  async function renderAdmin(){if(!isAdmin())return;const s=stats();$('dashProducts').textContent=s.products;$('dashUnits').textContent=s.units;$('dashRetail').textContent=money.format(s.retail);$('dashCost').textContent=money.format(s.cost);$('dashProfit').textContent=money.format(s.retail-s.cost);$('adminCategoryList').textContent=categories.length?categories.join(' · '):'No categories yet';$('adminDistributorList').textContent=distributors.length?distributors.join(' · '):'No distributors yet';const low=inventory.filter(p=>p.lowStockThreshold>0&&totalUnits(p)<=p.lowStockThreshold);$('lowStockList').innerHTML=low.length?low.map(p=>`<div class="alert-item"><span>${esc(p.name)}</span><strong>${totalUnits(p)} / ${p.lowStockThreshold}</strong></div>`).join(''):'<div class="small-note">No low-stock products.</div>';renderReports();const {data}=await db.from('inventory_history').select('*').order('changed_at',{ascending:false}).limit(100);$('historyRows').innerHTML=(data||[]).map(h=>`<tr><td>${new Date(h.changed_at).toLocaleString()}</td><td>${esc(h.product_name||h.barcode)}</td><td>${esc(h.action)}</td><td>${h.quantity_change>0?'+':''}${h.quantity_change} ${esc(h.location||'')}</td><td>${esc(h.changed_by_email||'User')}</td></tr>`).join('')||'<tr><td colspan="5">No history yet.</td></tr>'}
+  function renderReports(){const cat=$('reportCategory').value,dist=$('reportDistributor').value,filtered=inventory.filter(p=>(!cat||p.category===cat)&&(!dist||p.distributor===dist)),groups={};filtered.forEach(p=>{const k=p.category||'Uncategorized';(groups[k]??=[]).push(p)});$('reportRows').innerHTML=Object.entries(groups).sort().map(([k,v])=>{const s=stats(v);return`<tr><td>${esc(k)}</td><td>${s.products}</td><td>${s.units}</td><td>${money.format(s.retail)}</td><td>${money.format(s.cost)}</td></tr>`}).join('')||'<tr><td colspan="5">No report data.</td></tr>'}
+  $('reportCategory').onchange=renderReports;$('reportDistributor').onchange=renderReports;
+  $('adminAddCategory').onclick=()=>addList('category',$('adminCategoryName').value);$('adminAddDistributor').onclick=()=>addList('distributor',$('adminDistributorName').value);
+  $('catalogImportBtn').onclick=async()=>{if(!isAdmin())return;const file=$('catalogFile').files[0];if(!file){toast('Choose a Clover Excel file');return}$('catalogImportStatus').textContent='Reading workbook…';try{const buf=await file.arrayBuffer(),book=XLSX.read(buf),sheet=book.Sheets['Items']||book.Sheets[book.SheetNames[0]],rows=XLSX.utils.sheet_to_json(sheet,{defval:''}),valid=new Map();for(const r of rows){const barcode=normalizeBarcode(r['Product Code']),price=Number(r['Price']);if(!barcode||!Number.isFinite(price)||price<0.99||String(r['Hidden']).toLowerCase()==='yes')continue;valid.set(barcode,{barcode,product_name:String(r['Name']||'').trim(),price,cost:Number(r['Cost'])||0,category:String(r['Modifier Groups']||'').trim()||null,distributor:null,updated_at:new Date().toISOString()})}const all=[...valid.values()],chunk=400;for(let i=0;i<all.length;i+=chunk){$('catalogImportStatus').textContent=`Importing ${Math.min(i+chunk,all.length)} of ${all.length}…`;const {error}=await db.from('product_catalog').upsert(all.slice(i,i+chunk),{onConflict:'barcode'});if(error)throw error}const cats=[...new Set(all.map(x=>x.category).filter(Boolean))].map(name=>({name,created_by:currentUser.id}));if(cats.length)await db.from('categories').upsert(cats,{onConflict:'name'});$('catalogImportStatus').textContent=`Imported or updated ${all.length} catalog products. Live inventory was not overwritten.`;await loadLists()}catch(e){$('catalogImportStatus').textContent=`Import failed: ${e.message}`}};
+  $('camBtn').onclick=()=>camRunning?stopCamera():startCamera();function startCamera(){$('reader').style.display='block';html5QrCode=new Html5Qrcode('reader');html5QrCode.start({facingMode:'environment'},{fps:10,qrbox:{width:240,height:140}},t=>{stopCamera();handleScan(t)},()=>{}).then(()=>{camRunning=true;$('camBtn').textContent='Turn off'}).catch(e=>{$('camMsg').style.display='block';$('camMsg').textContent='Camera unavailable. Use the scanner input instead.'})}function stopCamera(){if(html5QrCode&&camRunning)html5QrCode.stop().then(()=>{html5QrCode.clear();$('reader').style.display='none';$('camBtn').textContent='Turn on';camRunning=false})}
+  function showAuthMessage(message,type='error'){$('authError').textContent=message;$('authError').className='auth-error'+(type==='success'?' success':type==='info'?' info':'')}
+  function setAuthMode(m){authMode=m;const s=m==='signin';$('authSignInTab').className='btn '+(s?'btn-ink':'btn-line');$('authSignUpTab').className='btn '+(!s?'btn-ink':'btn-line');$('authSubmit').textContent=s?'Sign in':'Create account';$('authConfirmWrap').classList.toggle('visible',!s);$('authPassword').autocomplete=s?'current-password':'new-password';$('authConfirmPassword').value='';showAuthMessage('','info')}
+  $('authSignInTab').onclick=()=>setAuthMode('signin');
+  $('authSignUpTab').onclick=()=>setAuthMode('signup');
+  $('authSubmit').onclick=async()=>{const email=$('authEmail').value.trim(),password=$('authPassword').value,confirmPassword=$('authConfirmPassword').value,button=$('authSubmit');showAuthMessage('','info');if(!email||password.length<6)return showAuthMessage('Enter a valid email and a password with at least 6 characters.');if(authMode==='signup'&&password!==confirmPassword)return showAuthMessage('Passwords do not match. Please enter the same password twice.');button.disabled=true;button.textContent=authMode==='signin'?'Signing in…':'Creating account…';try{if(authMode==='signin'){const {error}=await db.auth.signInWithPassword({email,password});if(error)showAuthMessage(error.message)}else{const redirectTo=window.location.origin+window.location.pathname;const {data,error}=await db.auth.signUp({email,password,options:{emailRedirectTo:redirectTo}});if(error)return showAuthMessage(error.message);$('authPassword').value='';$('authConfirmPassword').value='';if(data.session){showAuthMessage('Account created successfully. Email verification is currently not required, so you have been signed in.','success')}else{showAuthMessage(`Verification email sent to ${email}. Open the email and click the confirmation link before signing in.`,'success')}}}finally{button.disabled=false;button.textContent=authMode==='signin'?'Sign in':'Create account'}};
+  $('authPassword').addEventListener('keydown',e=>{if(e.key==='Enter')$('authSubmit').click()});
+  $('authConfirmPassword').addEventListener('keydown',e=>{if(e.key==='Enter')$('authSubmit').click()});
+  $('signOutBtn').onclick=()=>db.auth.signOut();
+  async function applySession(session){currentUser=session?.user||null;$('authOverlay').classList.toggle('hidden',!!currentUser);$('signOutBtn').style.display=currentUser?'block':'none';$('userEmail').textContent=currentUser?.email||'';if(currentUser){await loadRole();subscribe();await loadInventory()}else{inventory=[];userRole='staff';document.body.classList.remove('is-admin');sync('Offline')}}db.auth.onAuthStateChange((e,s)=>applySession(s));db.auth.getSession().then(({data})=>applySession(data.session));
 })();
 </script>
 </body>
