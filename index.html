@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
-<title>Inventory Management</title>
+<title>Shelf — Inventory Pro V5 Responsive</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
@@ -245,13 +245,78 @@
   .modal-actions{display:flex;gap:9px;margin-top:16px;}
   .modal-actions button{flex:1;}
 
+
+
+  /* Tablet and desktop responsive layout */
+  @media (min-width: 700px){
+    html,body{overscroll-behavior:auto;}
+    #app{max-width:none;width:100%;height:100dvh;margin:0;}
+    header{padding:20px 28px 16px;}
+    header .brand h1{font-size:25px;}
+    main{padding:22px 28px 110px;}
+    .view{max-width:1180px;margin:0 auto;}
+    .scan-card,.admin-card,.export-card{box-shadow:0 2px 12px rgba(27,27,24,.035);}
+    .dashboard-grid{grid-template-columns:repeat(5,minmax(0,1fr));}
+    .metric-card.wide{grid-column:auto;}
+    .metric-card{min-height:94px;display:flex;flex-direction:column;justify-content:center;}
+    .metric-card .metric-value{font-size:22px;}
+    .money-row{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .quick-grid{grid-template-columns:repeat(4,minmax(0,1fr));}
+    .panel-overlay{align-items:center;justify-content:center;padding:28px;}
+    .panel{max-width:760px;border-radius:18px;max-height:90vh;padding:24px;}
+    .panel-handle{display:none;}
+    .panel .form-grid-desktop{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;}
+    .scroll-table{max-height:520px;}
+    .data-table{font-size:12.5px;}
+    .data-table th,.data-table td{padding:11px 8px;}
+    .row{padding:14px 16px;}
+    .row .name{font-size:15px;}
+    .alert-item{grid-template-columns:minmax(220px,1.8fr) minmax(120px,.8fr) minmax(110px,.7fr) minmax(150px,1fr) auto;font-size:12.5px;}
+    nav .navwrap{max-width:760px;}
+    nav button{font-size:12px;}
+  }
+
+  @media (min-width: 1024px){
+    #app{margin-left:96px;width:calc(100% - 96px);}
+    header{padding:22px 34px 17px;}
+    main{padding:26px 34px 48px;}
+    nav{top:0;bottom:0;right:auto;width:96px;border-top:none;border-right:1px solid var(--line);padding:18px 8px;background:var(--panel);}
+    nav .navwrap{height:100%;max-width:none;display:flex;flex-direction:column;justify-content:center;gap:12px;}
+    nav button{flex:0 0 auto;min-height:68px;padding:10px 4px;border-radius:10px;}
+    nav button:hover{background:var(--paper);}
+    nav button .ic{font-size:21px;}
+    nav .fab{margin:0 auto;width:52px;height:52px;}
+    .toast{bottom:28px;}
+    .view{max-width:1320px;}
+    #view-scan.active{display:grid;grid-template-columns:minmax(430px,.9fr) minmax(430px,1.1fr);gap:22px;align-items:start;}
+    #view-scan .mode-switch,#view-scan .mode-help{grid-column:1/-1;}
+    #view-scan .scan-card{margin:0;position:sticky;top:112px;}
+    #view-scan .quick-adjust{margin:0;}
+    #view-inventory .search-bar{max-width:560px;}
+    #inventoryList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+    #inventoryList .row{margin:0;min-height:78px;}
+    #view-export .export-card{max-width:760px;margin:40px auto 0;}
+    #view-admin.active{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start;}
+    #view-admin .dashboard-grid{grid-column:1/-1;}
+    #view-admin>.admin-card,#view-admin>details.admin-card{margin:0;}
+    #view-admin .admin-card:has(#lowStockList),#view-admin .admin-card:has(#reportTable),#view-admin .admin-card:has(#historyRows){grid-column:1/-1;}
+    .admin-card{padding:20px;}
+    .collapse-card summary{padding:20px;}
+    .collapse-body{padding:0 20px 20px;}
+  }
+
+  @media (min-width: 1380px){
+    #inventoryList{grid-template-columns:repeat(3,minmax(0,1fr));}
+    .view{max-width:1480px;}
+  }
+
 </style>
 </head>
 <body>
 
   <div class="auth-overlay" id="authOverlay">
     <div class="auth-card">
-      <h2>Inventory Management</h2>
+      <h2>Shelf2 Inventory</h2>
       <p>Sign in to access the shared inventory. Every authorized user sees the same products and quantities.</p>
       <div class="auth-tabs">
         <button class="btn btn-ink" id="authSignInTab">Sign in</button>
